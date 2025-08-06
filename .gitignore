@@ -1,0 +1,11 @@
+__pycache__/
+
+.venv/
+.idea/
+
+images/
+output/
+
+*.pdf
+*.png
+*.html

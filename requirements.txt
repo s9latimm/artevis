@@ -1,0 +1,6 @@
+﻿matplotlib
+numpy
+pylint
+torch
+tqdm
+yapf
