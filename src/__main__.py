@@ -12,6 +12,9 @@ from torch import nn
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+plt.rcParams['font.family'] = 'cmr10'
+plt.rcParams['mathtext.fontset'] = 'cm'
+
 DPI: int = 1000
 SCALE: float = 2
 
@@ -35,7 +38,7 @@ PROJECT_DIR = OUTPUT_DIR / PROJECT
 def save_fig(fig: plt.Figure, path: Path) -> None:
     if path is not None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(path, format=path.suffix[1:], transparent=False, dpi=DPI / SCALE)
+        fig.savefig(path, format=path.suffix[1:], transparent=False, dpi=DPI)
 
 
 def save_image(im: np.ndarray, filename: str) -> None:
@@ -45,15 +48,31 @@ def save_image(im: np.ndarray, filename: str) -> None:
     norm = colors.Normalize(vmin=0, vmax=255)
     cmap = GRAY
 
-    fig = plt.Figure(figsize=(SCALE, SCALE))
-    ax = fig.add_subplot()
-    ax.set_axis_off()
-    ax.imshow(im, cmap=cmap, norm=norm, interpolation='nearest')
+    fig = plt.Figure(figsize=(1080 / DPI, 1080 / DPI))
+    sub = fig.add_subplot()
+    sub.set_axis_off()
+    sub.imshow(im, cmap=cmap, norm=norm, interpolation='nearest')
     save_fig(fig, PROJECT_DIR / f'{filename}.png')
 
 
-def save_weights(suffix: int, model: torch.nn.Module) -> None:
+def save_frame(n: int, suffix: int, model: torch.nn.Module, im: np.ndarray, loss: float) -> None:
     weights = [w.detach().cpu().numpy() for i, w in model.named_parameters() if 'weight' in i][1:-1]
+    fig = plt.Figure((1920 / DPI, 1080 / DPI))
+
+    im[im > 255] = 255
+    im[im < 0] = 0
+
+    norm = colors.Normalize(vmin=0, vmax=255)
+    cmap = GRAY
+
+    sub = fig.add_subplot(1, len(weights) + 1, len(weights) + 1)
+    sub.set_axis_off()
+    sub.imshow(im, cmap=cmap, norm=norm, interpolation='nearest',  zorder=1)
+    ax = sub.axis()
+    rec = plt.Rectangle((ax[0], ax[2]), ax[1] - ax[0], ax[3] - ax[2], fill=False, lw=.8,
+                        linestyle='solid', zorder=0)
+    rec = sub.add_patch(rec)
+    rec.set_clip_on(False)
 
     vmin, vmax = np.nanmin(weights), np.nanmax(weights)
     if vmin < 0 < vmax:
@@ -69,14 +88,20 @@ def save_weights(suffix: int, model: torch.nn.Module) -> None:
         norm = colors.Normalize(vmin=0, vmax=vmax)
         cmap = SEISMIC_POSITIVE
 
-    fig = plt.Figure(figsize=(len(weights) * SCALE, SCALE))
-
     for i, w in enumerate(weights):
-        ax = fig.add_subplot(1, len(weights), i + 1)
-        ax.set_axis_off()
-        ax.imshow(w, cmap=cmap, norm=norm, interpolation='nearest')
+        sub = fig.add_subplot(1, len(weights) + 1, i + 1)
+        sub.set_axis_off()
+        sub.set_frame_on(True)
+        sub.imshow(w, cmap=cmap, norm=norm, interpolation='nearest', zorder=1)
+        ax = sub.axis()
+        rec = plt.Rectangle((ax[0], ax[2]), ax[1] - ax[0], ax[3] - ax[2], fill=False, lw=.8,
+                            linestyle='solid', zorder=0)
+        rec = sub.add_patch(rec)
+        rec.set_clip_on(False)
 
-    save_fig(fig, PROJECT_DIR / f'weights_{suffix:06d}.png')
+    fig.suptitle(f'{n}\n({loss:.3f})', fontsize=2)
+    fig.subplots_adjust(bottom=.05, top=.95, left=0.05, right=.95, wspace=.05, hspace=.05)
+    save_fig(fig, PROJECT_DIR / f'frame_{suffix:06d}.png')
 
 
 def main() -> None:
@@ -124,7 +149,7 @@ def main() -> None:
     optimizer = torch.optim.Adam(model.parameters())
 
     mse = nn.MSELoss()
-    delta = 1e-3
+    delta = 1e-2
     frame = 1
 
     model.train()
@@ -139,23 +164,22 @@ def main() -> None:
         for _ in range(n):
             loss = optimizer.step(closure)
             if loss < delta:
+                if pbar.n < n:
+                    pbar.update(1)
                 break
             if pbar.n % 100 == 0:
                 logging.debug(f'Loss: {loss:.12f}')
-                save_weights(frame, model)
-                save_image(model.forward(x).detach().cpu().numpy().reshape(shape), f'prediction_{frame:06d}')
+                save_frame(pbar.n, frame, model, model.forward(x).detach().cpu().numpy().reshape(shape), loss)
                 frame += 1
             if pbar.n < n:
                 pbar.update(1)
 
         logging.debug(f'Loss: {loss:.12f}')
-        save_weights(frame, model)
+        save_frame(pbar.n, frame, model, model.forward(x).detach().cpu().numpy().reshape(shape), loss)
 
     model.eval()
     with torch.no_grad():
-        im = model.forward(x).detach().cpu().numpy().reshape(shape)
-        save_image(im, f'prediction_{frame:06d}')
-        save_image(im, 'output')
+        save_image(model.forward(x).detach().cpu().numpy().reshape(shape), 'output')
 
 
 if __name__ == '__main__':
