@@ -3,13 +3,13 @@ import random
 import sys
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
+import cv2
 import torch
 from torch import nn
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
-
-import matplotlib.pyplot as plt
 
 DPI: int = 1000
 SCALE: float = 2.5
@@ -21,8 +21,16 @@ def save_fig(fig: plt.Figure, path: Path) -> None:
         fig.savefig(path, format=path.suffix[1:], bbox_inches='tight', transparent=True, dpi=DPI / SCALE)
 
 
+def print_im(n, im: np.ndarray) -> None:
+    fig = plt.Figure(figsize=(SCALE, SCALE))
+    ax = fig.add_subplot()
+    ax.set_axis_off()
+    ax.imshow(im, cmap='gray', interpolation='nearest')
+    save_fig(fig, Path(f'../output/prediction_{n:06d}.png'))
+
+
 def create_frame(model: torch.nn.Module, suffix: int) -> None:
-    weights = [w.detach().cpu().numpy() for w in model.parameters()]
+    weights = [w.detach().cpu().numpy() for i, w in model.named_parameters() if 'weight' in i][1:-1]
 
     fig = plt.Figure(figsize=(len(weights) * SCALE, SCALE))
 
@@ -39,27 +47,48 @@ def main() -> None:
 
     device = torch.device('cuda')
 
-    x = [0, 1, 2, 3, 4]
-    y = [9, 8, 7, 6, 5]
+    im = cv2.imread('../images/mona-lisa.png', cv2.IMREAD_GRAYSCALE)
 
-    __x = torch.tensor(x, dtype=torch.float64, device=device)
-    __y = torch.tensor(y, dtype=torch.float64, device=device)
+    fig = plt.Figure(figsize=(SCALE, SCALE))
+    ax = fig.add_subplot()
+    ax.set_axis_off()
+    ax.imshow(im, cmap='gray', interpolation='nearest')
+    save_fig(fig, Path('../output/original.png'))
+
+    y = torch.tensor([[i] for i in im.flatten()], dtype=torch.float64, device=device)
+
+    shape = im.shape
+    grid = np.mgrid[0:shape[0], 0:shape[1]]
+
+    x = torch.hstack([
+        torch.tensor([[i] for i in grid[0].flatten()], dtype=torch.float64, device=device),
+        torch.tensor([[i] for i in grid[1].flatten()], dtype=torch.float64, device=device),
+    ])
+
+    logging.debug(x)
+    logging.debug(y)
+
+    layer = 200
 
     model = nn.Sequential()
-    model.append(nn.Linear(__x.size(dim=0), 10, bias=False, dtype=torch.float64))
+    model.append(nn.Linear(2, layer, bias=True, dtype=torch.float64))
     model.append(nn.Tanh())
-    model.append(nn.Linear(10, 10, bias=False, dtype=torch.float64))
+    model.append(nn.Linear(layer, layer, bias=True, dtype=torch.float64))
     model.append(nn.Tanh())
-    model.append(nn.Linear(10, __y.size(dim=0), bias=False, dtype=torch.float64))
+    model.append(nn.Linear(layer, layer, bias=True, dtype=torch.float64))
+    model.append(nn.Tanh())
+    model.append(nn.Linear(layer, layer, bias=True, dtype=torch.float64))
+    model.append(nn.Tanh())
+    model.append(nn.Linear(layer, 1, bias=True, dtype=torch.float64))
+    logging.info(model)
 
     model.to(device)
-
-    print(model)
+    n = 100_000
 
     optimizer = torch.optim.LBFGS(model.parameters(),
                                   lr=1,
-                                  max_iter=100,
-                                  max_eval=100,
+                                  max_iter=n,
+                                  max_eval=n,
                                   history_size=50,
                                   tolerance_grad=1e-17,
                                   tolerance_change=5e-12,
@@ -67,28 +96,31 @@ def main() -> None:
 
     mse = nn.MSELoss()
 
-    with tqdm(total=100, position=0, leave=True) as pbar, logging_redirect_tqdm():
+    with tqdm(total=n, position=0, leave=True) as pbar, logging_redirect_tqdm():
 
         def closure():
-            if pbar.n < 100:
+            if pbar.n < n:
                 pbar.update(1)
-            create_frame(model, pbar.n)
+            if pbar.n % 100 == 0:
+                create_frame(model, pbar.n)
+                print_im(pbar.n, model.forward(x).detach().cpu().numpy().reshape(shape))
 
             optimizer.zero_grad()
-            p = model.forward(__x)
-            loss = mse(p, __y)
-            logging.debug(p.detach().cpu().tolist()[0])
+            p = model.forward(x)
+            loss = mse(p, y)
+            if pbar.n % 100 == 0:
+                logging.debug(f'Loss: {loss.item():.12f}')
             loss.backward()
             return loss
 
         model.train()
         optimizer.step(closure)
 
-    create_frame(model, 9999)
-
     model.eval()
-    e = model.forward(__x).detach().cpu().tolist()
-    logging.info(e)
+
+    with torch.no_grad():
+        create_frame(model, n)
+        print_im(n, model.forward(x).detach().cpu().numpy().reshape(shape))
 
 
 if __name__ == '__main__':

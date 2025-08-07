@@ -1,5 +1,6 @@
 ﻿matplotlib
 numpy
+opencv-python
 pylint
 torch
 tqdm
