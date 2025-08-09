@@ -3,6 +3,7 @@ import random
 import sys
 from pathlib import Path
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
@@ -15,11 +16,12 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 plt.rcParams['font.family'] = 'cmr10'
 plt.rcParams['mathtext.fontset'] = 'cm'
 
-DPI: int = 1000
+matplotlib.use('TkAgg')
+
+DPI: int = 100
 SCALE: float = 2
 
-GRAY: plt.Colormap = colors.LinearSegmentedColormap.from_list('gray',
-                                                              plt.get_cmap('gray')(np.linspace(0, 1., 100)))
+GRAY: plt.Colormap = colors.LinearSegmentedColormap.from_list('gray', plt.get_cmap('gray')(np.linspace(0, 1., 100)))
 SEISMIC: plt.Colormap = colors.LinearSegmentedColormap.from_list('seismic',
                                                                  plt.get_cmap('seismic')(np.linspace(0, 1., 100)))
 SEISMIC_NEGATIVE: plt.Colormap = colors.LinearSegmentedColormap.from_list(
@@ -31,8 +33,7 @@ SEISMIC_POSITIVE: plt.Colormap = colors.LinearSegmentedColormap.from_list(
 
 OUTPUT_DIR: Path = Path(__file__).parents[1] / 'output'
 IMAGE_DIR: Path = Path(__file__).parents[1] / 'images'
-PROJECT = 'mona-lisa'
-PROJECT_DIR = OUTPUT_DIR / PROJECT
+PROJECTS = ['mona-lisa_1080', 'girl_1080', 'nebelmeer_1080', 'schrei_1080', 'sterne_1080']
 
 
 def save_fig(fig: plt.Figure, path: Path) -> None:
@@ -42,37 +43,38 @@ def save_fig(fig: plt.Figure, path: Path) -> None:
 
 
 def save_image(im: np.ndarray, filename: str) -> None:
+    im = im.astype(np.int32)
     im[im > 255] = 255
     im[im < 0] = 0
-
-    norm = colors.Normalize(vmin=0, vmax=255)
-    cmap = GRAY
 
     fig = plt.Figure(figsize=(1080 / DPI, 1080 / DPI))
     sub = fig.add_subplot()
     sub.set_axis_off()
-    sub.imshow(im, cmap=cmap, norm=norm, interpolation='nearest')
-    save_fig(fig, PROJECT_DIR / f'{filename}.png')
+    sub.imshow(im[:, :, ::-1], interpolation='nearest')
+    save_fig(fig, OUTPUT_DIR / f'{filename}.png')
 
 
-def save_frame(n: int, suffix: int, model: torch.nn.Module, im: np.ndarray, loss: float) -> None:
+def save_frame(fig: plt.Figure, n: int, model: torch.nn.Module, im: np.ndarray, losses: [float]) -> None:
     weights = [w.detach().cpu().numpy() for i, w in model.named_parameters() if 'weight' in i][1:-1]
-    fig = plt.Figure((1920 / DPI, 1080 / DPI))
 
+    im = im.astype(np.int32)
     im[im > 255] = 255
     im[im < 0] = 0
 
-    norm = colors.Normalize(vmin=0, vmax=255)
-    cmap = GRAY
+    fig.clear()
 
-    sub = fig.add_subplot(1, len(weights) + 1, len(weights) + 1)
+    sub = fig.add_subplot(2, 1, 2)
     sub.set_axis_off()
-    sub.imshow(im, cmap=cmap, norm=norm, interpolation='nearest',  zorder=1)
-    ax = sub.axis()
-    rec = plt.Rectangle((ax[0], ax[2]), ax[1] - ax[0], ax[3] - ax[2], fill=False, lw=.8,
-                        linestyle='solid', zorder=0)
-    rec = sub.add_patch(rec)
-    rec.set_clip_on(False)
+    sub.plot(losses[-1000:], c='r')
+
+    sub = fig.add_subplot(2, len(weights) + 1, len(weights) + 1)
+    sub.set_axis_off()
+    sub.imshow(im[:, :, ::-1], interpolation='nearest', zorder=1)
+    # ax = sub.axis()
+    # rec = plt.Rectangle((ax[0], ax[2]), ax[1] - ax[0], ax[3] - ax[2], fill=False, lw=.8,
+    #                     linestyle='solid', zorder=0)
+    # rec = sub.add_patch(rec)
+    # rec.set_clip_on(False)
 
     vmin, vmax = np.nanmin(weights), np.nanmax(weights)
     if vmin < 0 < vmax:
@@ -89,48 +91,97 @@ def save_frame(n: int, suffix: int, model: torch.nn.Module, im: np.ndarray, loss
         cmap = SEISMIC_POSITIVE
 
     for i, w in enumerate(weights):
-        sub = fig.add_subplot(1, len(weights) + 1, i + 1)
+        sub = fig.add_subplot(2, len(weights) + 1, i + 1)
         sub.set_axis_off()
         sub.set_frame_on(True)
         sub.imshow(w, cmap=cmap, norm=norm, interpolation='nearest', zorder=1)
-        ax = sub.axis()
-        rec = plt.Rectangle((ax[0], ax[2]), ax[1] - ax[0], ax[3] - ax[2], fill=False, lw=.8,
-                            linestyle='solid', zorder=0)
-        rec = sub.add_patch(rec)
-        rec.set_clip_on(False)
+        # ax = sub.axis()
+        # rec = plt.Rectangle((ax[0], ax[2]), ax[1] - ax[0], ax[3] - ax[2], fill=False, lw=.8,
+        #                     linestyle='solid', zorder=0)
+        # rec = sub.add_patch(rec)
+        # rec.set_clip_on(False)
 
-    fig.suptitle(f'{n}\n({loss:.3f})', fontsize=2)
-    fig.subplots_adjust(bottom=.05, top=.95, left=0.05, right=.95, wspace=.05, hspace=.05)
-    save_fig(fig, PROJECT_DIR / f'frame_{suffix:06d}.png')
+    fig.suptitle(f'{n}\n({np.min(losses):.3f})', fontsize=14)
+    fig.subplots_adjust(bottom=.1, top=.9, left=0.02, right=.98, wspace=.05, hspace=.05)
+
+    fig.canvas.flush_events()
+
+
+SIZE = 256
+
+
+def train(image: Path, n: int, frame: int, delta: float, model: torch.nn.Module, optimizer: torch.optim.Optimizer,
+          dtype, device, losses) -> int:
+    logging.info(f'Loading {image}')
+
+    im = cv2.imread(str(image), cv2.IMREAD_COLOR)
+    if im.shape[0] > im.shape[1]:
+        im = cv2.resize(im, (round(SIZE / im.shape[0] * im.shape[1]), SIZE))
+    else:
+        im = cv2.resize(im, (SIZE, round(SIZE / im.shape[1] * im.shape[0])))
+
+    logging.info(im.shape)
+    save_image(im, 'input')
+
+    y = torch.tensor([i for j in im for i in j], dtype=dtype, device=device)
+    shape = (im.shape[0], im.shape[1], 3)
+
+    grid = np.mgrid[0:shape[0], 0:shape[1]]
+    mse = nn.MSELoss(reduction='mean')
+
+    x = torch.hstack([
+        torch.tensor([[i + 1] for i in grid[0].flatten()], dtype=dtype, device=device),
+        torch.tensor([[i + 1] for i in grid[1].flatten()], dtype=dtype, device=device),
+    ])
+
+    logging.info(f'x: {x.shape}')
+    logging.info(f'y: {y.shape}')
+
+    # plt.interactive(True)
+    fig = plt.figure(figsize=(1920 / DPI, 1080 / DPI), dpi=DPI)
+    fig.canvas.draw()
+    step = 0
+
+    model.train()
+
+    with tqdm(total=100, position=0, leave=True) as pbar, logging_redirect_tqdm():
+
+        def closure():
+            optimizer.zero_grad()
+            err = mse(model.forward(x), y)
+            err.backward()
+            return err
+
+        for _ in range(n):
+            loss = optimizer.step(closure)
+            losses.append(loss.detach().cpu().numpy())
+            progress = int(100 * min(1, max(0, (1 - (np.min(losses) - delta) / (np.max(losses) - delta)))))
+            pbar.update(progress - pbar.n)
+            if loss < delta:
+                logging.info(f'Step {step} (Frame {frame}) -- Loss: {np.min(losses):.12f} ({progress:d}%)')
+                break
+            if step % 20 == 0:
+                logging.info(f'Step {step} (Frame {frame}) -- Loss: {np.min(losses):.12f} ({progress:d}%)')
+                save_frame(fig, pbar.n, model, model.forward(x).detach().cpu().numpy().reshape(shape), losses)
+                save_fig(fig, OUTPUT_DIR / f'frame_{frame:06d}.png')
+                frame += 1
+            step += 1
+
+        save_frame(fig, pbar.n, model, model.forward(x).detach().cpu().numpy().reshape(shape), losses)
+        save_fig(fig, OUTPUT_DIR / f'frame_{frame:06d}.png')
+
+    model.eval()
+
+    save_image(model.forward(x).detach().cpu().numpy().reshape(shape), 'output.png')
+    return frame
 
 
 def main() -> None:
     assert torch.cuda.is_available()
 
     device = torch.device('cuda')
-
-    image = IMAGE_DIR / f'{PROJECT}.png'
-    logging.debug(f'Loading {image}')
-    im = cv2.imread(str(image), cv2.IMREAD_GRAYSCALE)
-
-    save_image(im, 'input')
-
     dtype = torch.float32
-
-    y = torch.tensor([[i] for i in im.flatten()], dtype=dtype, device=device)
-
-    shape = im.shape
-    grid = np.mgrid[0:shape[0], 0:shape[1]]
-
-    x = torch.hstack([
-        torch.tensor([[i] for i in grid[0].flatten()], dtype=dtype, device=device),
-        torch.tensor([[i] for i in grid[1].flatten()], dtype=dtype, device=device),
-    ])
-
-    logging.debug(f'x: {x.shape}')
-    logging.debug(f'y: {y.shape}')
-
-    layer = 100
+    layer = SIZE
 
     model = nn.Sequential()
     model.append(nn.Linear(2, layer, bias=True, dtype=dtype))
@@ -141,52 +192,27 @@ def main() -> None:
     model.append(nn.Tanh())
     model.append(nn.Linear(layer, layer, bias=True, dtype=dtype))
     model.append(nn.Tanh())
-    model.append(nn.Linear(layer, 1, bias=True, dtype=dtype))
+    model.append(nn.Linear(layer, 3, bias=True, dtype=dtype))
     logging.info(model)
+
     model.to(device)
 
-    n = 500_000
+    n = np.iinfo(np.int32).max
+    # n = 1_000_000
     optimizer = torch.optim.Adam(model.parameters())
-
-    mse = nn.MSELoss()
-    delta = 1e-2
+    delta = 100
     frame = 1
+    losses = []
 
-    model.train()
-    with tqdm(total=n, position=0, leave=True) as pbar, logging_redirect_tqdm():
-
-        def closure():
-            optimizer.zero_grad()
-            err = mse(model.forward(x), y)
-            err.backward()
-            return err
-
-        for _ in range(n):
-            loss = optimizer.step(closure)
-            if loss < delta:
-                if pbar.n < n:
-                    pbar.update(1)
-                break
-            if pbar.n % 100 == 0:
-                logging.debug(f'Loss: {loss:.12f}')
-                save_frame(pbar.n, frame, model, model.forward(x).detach().cpu().numpy().reshape(shape), loss)
-                frame += 1
-            if pbar.n < n:
-                pbar.update(1)
-
-        logging.debug(f'Loss: {loss:.12f}')
-        save_frame(pbar.n, frame, model, model.forward(x).detach().cpu().numpy().reshape(shape), loss)
-
-    model.eval()
-    with torch.no_grad():
-        save_image(model.forward(x).detach().cpu().numpy().reshape(shape), 'output')
+    project = PROJECTS[1]
+    train(IMAGE_DIR / f'{project}.png', n, frame, delta, model, optimizer, dtype, device, losses)
 
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s %(module)s[%(levelname)s]: %(message)s',
                         handlers=[logging.StreamHandler(sys.stdout)],
                         encoding='utf-8',
-                        level=logging.DEBUG)
+                        level=logging.INFO)
     torch.manual_seed(42)
     random.seed(42)
     np.random.seed(42)
