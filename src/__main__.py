@@ -48,7 +48,11 @@ def save_image(im: np.ndarray, path: Path) -> None:
     im[im > 255] = 255
     im[im < 0] = 0
 
-    fig = plt.Figure(figsize=(im.shape[1] / DPI, im.shape[0] / DPI))
+    if im.shape[0] > im.shape[1]:
+        fig = plt.Figure(figsize=(1024 / im.shape[0] * im.shape[1] / DPI, 1024 / DPI), dpi=DPI)
+    else:
+        fig = plt.Figure(figsize=(1024 / DPI, 1024 / im.shape[1] * im.shape[0] / DPI), dpi=DPI)
+
     sub = fig.add_subplot()
     sub.set_axis_off()
     sub.imshow(im[:, :, ::-1], interpolation='lanczos')
@@ -83,7 +87,7 @@ def save_frame(fig: plt.Figure, n: int, model: torch.nn.Module, im: np.ndarray, 
     sub = fig.add_subplot(2, 1, 2)
     sub.set_axis_off()
     sub.set_yscale('log', base=10)
-    sub.plot(losses[-1000:], c='r')
+    sub.plot(losses[-2000:], c='r')
 
     sub = fig.add_subplot(2, len(weights) + 2, len(weights) + 1)
     sub.set_axis_off()
@@ -166,27 +170,24 @@ def train(project: str, n: int, frame: int, threshold: float, model: torch.nn.Mo
     else:
         im = cv2.resize(im, (SIZE, round(SIZE / im.shape[1] * im.shape[0])))
 
-    logging.info(im.shape)
     save_image(im, OUTPUT_DIR / project / 'input.png')
 
-    train_y = torch.tensor([i for j in im for i in j], dtype=dtype, device=device)
-    shape = im.shape[0], im.shape[1], 3
+    ref_y = torch.tensor(np.array([i for j in im for i in j]), dtype=dtype, device=device)
+    ref_shape = im.shape[0], im.shape[1], 3
+    logging.info(ref_shape)
 
-    train_grid = np.mgrid[0:shape[0], 0:shape[1]]
-    train_x = torch.hstack([
-        torch.tensor([[i / np.nanmax(train_grid[0])] for i in train_grid[0].flatten()], dtype=dtype, device=device),
-        torch.tensor([[i / np.nanmax(train_grid[1])] for i in train_grid[1].flatten()], dtype=dtype, device=device),
+    ref_grid = np.mgrid[0:ref_shape[0], 0:ref_shape[1]]
+    ref_x = torch.hstack([
+        torch.tensor(np.array([[i / np.nanmax(ref_grid[0])] for i in ref_grid[0].flatten()]),
+                     dtype=dtype,
+                     device=device),
+        torch.tensor(np.array([[i / np.nanmax(ref_grid[1])] for i in ref_grid[1].flatten()]),
+                     dtype=dtype,
+                     device=device),
     ])
 
-    plot_shape = 2 * shape[0], 2 * shape[1], shape[2]
-    plot_grid = np.mgrid[0:plot_shape[0], 0:plot_shape[1]]
-    plot_x = torch.hstack([
-        torch.tensor([[i / np.nanmax(plot_grid[0])] for i in plot_grid[0].flatten()], dtype=dtype, device=device),
-        torch.tensor([[i / np.nanmax(plot_grid[1])] for i in plot_grid[1].flatten()], dtype=dtype, device=device),
-    ])
-
-    logging.info(f'x: {train_x.shape}')
-    logging.info(f'y: {train_y.shape}')
+    logging.info(f'x: {ref_x.shape}')
+    logging.info(f'y: {ref_y.shape}')
 
     # plt.interactive(True)
     fig = plt.figure(figsize=(1920 / DPI, 1080 / DPI), dpi=DPI)
@@ -200,7 +201,7 @@ def train(project: str, n: int, frame: int, threshold: float, model: torch.nn.Mo
 
         def closure():
             optimizer.zero_grad()
-            err = mse(model.forward(train_x), train_y)
+            err = mse(model.forward(ref_x), ref_y)
             err.backward()
             return err
 
@@ -208,9 +209,10 @@ def train(project: str, n: int, frame: int, threshold: float, model: torch.nn.Mo
             loss = optimizer.step(closure)
             losses.append(loss.detach().cpu().numpy())
             progress = int(100 * min(1, max(0, (1 - (np.min(losses) - threshold) / (np.max(losses) - threshold)))))
-            pbar.update(progress - pbar.n)
-            if step > 1000 and np.min(losses) < threshold and abs(np.min(losses[-1000:-500]) -
-                                                                  np.min(losses[-500:])) < 1:
+            if pbar.n < progress:
+                pbar.update(progress - pbar.n)
+            if step > 2000 and np.min(losses) < threshold and abs(np.min(losses[-2000:-1000]) -
+                                                                  np.min(losses[-1000:])) < 1:
                 logging.info(f'Step {step} (Frame {frame}) -- Loss: {np.min(losses):.12f} ({progress:d}%)')
                 break
             if step % 20 == 0:
@@ -236,8 +238,8 @@ def train(project: str, n: int, frame: int, threshold: float, model: torch.nn.Mo
                 art.eval()
 
                 save_frame(fig, step, model,
-                           model.forward(plot_x).detach().cpu().numpy().reshape(plot_shape),
-                           art.forward(plot_x).detach().cpu().numpy().reshape(plot_shape), losses)
+                           model.forward(ref_x).detach().cpu().numpy().reshape(ref_shape),
+                           art.forward(ref_x).detach().cpu().numpy().reshape(ref_shape), losses)
                 save_fig(fig, OUTPUT_DIR / project / f'frame_{frame:06d}.png')
                 frame += 1
             step += 1
@@ -262,21 +264,24 @@ def train(project: str, n: int, frame: int, threshold: float, model: torch.nn.Mo
         art.eval()
 
         save_frame(fig, step, model,
-                   model.forward(plot_x).detach().cpu().numpy().reshape(plot_shape),
-                   art.forward(plot_x).detach().cpu().numpy().reshape(plot_shape), losses)
+                   model.forward(ref_x).detach().cpu().numpy().reshape(ref_shape),
+                   art.forward(ref_x).detach().cpu().numpy().reshape(ref_shape), losses)
         save_fig(fig, OUTPUT_DIR / project / f'frame_{frame:06d}.png')
 
     model.eval()
 
-    eval_shape = 10 * shape[0], 10 * shape[1], shape[2]
+    eval_shape = 4 * ref_shape[0], 4 * ref_shape[1], ref_shape[2]
     eval_grid = np.mgrid[0:eval_shape[0], 0:eval_shape[1]]
-    eval_y = torch.hstack([
-        torch.tensor([[i / np.nanmax(eval_grid[0])] for i in eval_grid[0].flatten()], dtype=dtype, device=device),
-        torch.tensor([[i / np.nanmax(eval_grid[1])] for i in eval_grid[1].flatten()], dtype=dtype, device=device),
+
+    eval_x = torch.hstack([
+        torch.tensor(np.array([[i / np.max(eval_grid[0])] for i in eval_grid[0].flatten()]), dtype=dtype,
+                     device=device),
+        torch.tensor(np.array([[i / np.max(eval_grid[1])] for i in eval_grid[1].flatten()]), dtype=dtype,
+                     device=device),
     ])
 
-    save_image(model.forward(eval_y).detach().cpu().numpy().reshape(eval_shape), OUTPUT_DIR / project / 'output.png')
-    save_art(art.forward(eval_y).detach().cpu().numpy().reshape(eval_shape), OUTPUT_DIR / project / 'art.png')
+    save_image(model.forward(eval_x).detach().cpu().numpy().reshape(eval_shape), OUTPUT_DIR / project / 'output.png')
+    save_art(art.forward(eval_x).detach().cpu().numpy().reshape(eval_shape), OUTPUT_DIR / project / 'art.png')
 
     return frame
 
