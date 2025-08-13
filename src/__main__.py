@@ -6,6 +6,7 @@ from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.transforms import Bbox
 import numpy as np
 import cv2
 import torch
@@ -37,10 +38,10 @@ IMAGE_DIR: Path = Path(__file__).parents[1] / 'images'
 PROJECTS = ['mona-lisa_1080', 'girl_1080', 'nebelmeer_1080', 'schrei_1080', 'sterne_1080']
 
 
-def save_fig(fig: plt.Figure, path: Path) -> None:
+def save_fig(fig: plt.Figure, path: Path, dpi: float = DPI) -> None:
     if path is not None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(path, format=path.suffix[1:], transparent=False, dpi=DPI)
+        fig.savefig(path, format=path.suffix[1:], transparent=False, dpi=dpi)
 
 
 def save_image(im: np.ndarray, path: Path) -> None:
@@ -48,25 +49,97 @@ def save_image(im: np.ndarray, path: Path) -> None:
     im[im > 255] = 255
     im[im < 0] = 0
 
-    if im.shape[0] > im.shape[1]:
-        fig = plt.Figure(figsize=(1024 / im.shape[0] * im.shape[1] / DPI, 1024 / DPI), dpi=DPI)
-    else:
-        fig = plt.Figure(figsize=(1024 / DPI, 1024 / im.shape[1] * im.shape[0] / DPI), dpi=DPI)
+    fig = plt.Figure(figsize=(im.shape[1], im.shape[0]), dpi=1)
 
     sub = fig.add_subplot()
     sub.set_axis_off()
-    sub.imshow(im[:, :, ::-1], interpolation='lanczos')
+    sub.imshow(im[:, :, ::-1], interpolation='nearest')
     fig.subplots_adjust(bottom=0, top=1, left=0, right=1)
     sub.margins(0, 0)
-    save_fig(fig, path)
+    save_fig(fig, path, 1)
 
 
 def save_art(art: np.ndarray, path: Path) -> None:
     w, b = np.nanmin(art), np.nanmax(art)
     art -= w
     art *= 255 / (b - w)
-    art = art.astype(np.int32)
-    save_image(art, path)
+    im = art.astype(np.int32)
+
+    im[im > 255] = 255
+    im[im < 0] = 0
+
+    fig = plt.Figure(figsize=(im.shape[1], im.shape[0]), dpi=1)
+
+    sub = fig.add_subplot()
+    sub.set_axis_off()
+    sub.imshow(im[:, :, ::-1], interpolation='nearest', zorder=1)
+
+    sub.set_xlim(0, im.shape[1])
+    sub.set_ylim(0, im.shape[0])
+
+    r_min, r_max = np.inf, -np.inf
+    r_grad = [(0, 0), (0, 0)]
+    r_color = 0
+
+    g_min, g_max = np.inf, -np.inf
+    g_grad = [(0, 0), (0, 0)]
+    g_color = 0
+
+    b_min, b_max = np.inf, -np.inf
+    b_grad = [(0, 0), (0, 0)]
+    b_color = 0
+
+    lw = max(im.shape[0], im.shape[1]) / 2
+
+    for i in range(art.shape[0]):
+        for j in range(art.shape[1]):
+            b, g, r = art[i][j]
+
+            r_clean = r - g - b
+            if r_clean < r_min:
+                r_min = r_clean
+                r_grad[0] = j, i
+            if r_clean > r_max:
+                r_max = r_clean
+                r_grad[1] = j, i
+                r_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), 1 - (b + g) / 510
+
+            g_clean = g - r - b
+            if g_clean < g_min:
+                g_min = g_clean
+                g_grad[0] = j, i
+            if g_clean > g_max:
+                g_max = g_clean
+                g_grad[1] = j, i
+                g_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), 1 - (r + b) / 510
+
+            b_clean = b - r - g
+            if b_clean < b_min:
+                b_min = b_clean
+                b_grad[0] = j, i
+            if b_clean > b_max:
+                b_max = b_clean
+                b_grad[1] = j, i
+                b_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), 1 - (r + g) / 510
+
+    rec = plt.Circle(r_grad[1], min(abs(r_grad[1][0] - r_grad[0][0]), abs(r_grad[1][1] - r_grad[0][1])), fill=False,
+                     lw=lw, color=r_color, zorder=2)
+    rec = sub.add_patch(rec)
+    rec.set_clip_on(True)
+
+    rec = plt.Circle(g_grad[1], min(abs(g_grad[1][0] - g_grad[0][0]), abs(g_grad[1][1] - g_grad[0][1])), fill=False,
+                     lw=lw, color=g_color, zorder=2)
+    rec = sub.add_patch(rec)
+    rec.set_clip_on(True)
+
+    rec = plt.Circle(b_grad[1], min(abs(b_grad[1][0] - b_grad[0][0]), abs(b_grad[1][1] - b_grad[0][1])), fill=False,
+                     lw=lw, color=b_color, zorder=2)
+    rec = sub.add_patch(rec)
+    rec.set_clip_on(True)
+
+    fig.subplots_adjust(bottom=0, top=1, left=0, right=1)
+    sub.margins(0, 0)
+    save_fig(fig, path, 1)
 
 
 def save_frame(fig: plt.Figure, n: int, model: torch.nn.Module, im: np.ndarray, art: np.ndarray,
@@ -87,7 +160,7 @@ def save_frame(fig: plt.Figure, n: int, model: torch.nn.Module, im: np.ndarray, 
     sub = fig.add_subplot(2, 1, 2)
     sub.set_axis_off()
     sub.set_yscale('log', base=10)
-    sub.plot(losses[-2000:], c='r')
+    sub.plot(losses[-5_000:], c='r')
 
     sub = fig.add_subplot(2, len(weights) + 2, len(weights) + 1)
     sub.set_axis_off()
@@ -96,12 +169,68 @@ def save_frame(fig: plt.Figure, n: int, model: torch.nn.Module, im: np.ndarray, 
     sub = fig.add_subplot(2, len(weights) + 2, len(weights) + 2)
     sub.set_axis_off()
     sub.imshow(art[:, :, ::-1], interpolation='nearest', zorder=1)
+    sub.set_xlim(0, art.shape[1])
+    sub.set_ylim(0, art.shape[0])
 
-    # ax = sub.axis()
-    # rec = plt.Rectangle((ax[0], ax[2]), ax[1] - ax[0], ax[3] - ax[2], fill=False, lw=.8,
-    #                     linestyle='solid', zorder=0)
-    # rec = sub.add_patch(rec)
-    # rec.set_clip_on(False)
+    r_min, r_max = np.inf, -np.inf
+    r_grad = [(0, 0), (0, 0)]
+    r_color = 0
+
+    g_min, g_max = np.inf, -np.inf
+    g_grad = [(0, 0), (0, 0)]
+    g_color = 0
+
+    b_min, b_max = np.inf, -np.inf
+    b_grad = [(0, 0), (0, 0)]
+    b_color = 0
+
+    lw = 2
+
+    for i in range(art.shape[0]):
+        for j in range(art.shape[1]):
+            b, g, r = art[i][j]
+
+            r_clean = r - g - b
+            if r_clean < r_min:
+                r_min = r_clean
+                r_grad[0] = j, i
+            if r_clean > r_max:
+                r_max = r_clean
+                r_grad[1] = j, i
+                r_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), 1 - (b + g) / 510
+
+            g_clean = g - r - b
+            if g_clean < g_min:
+                g_min = g_clean
+                g_grad[0] = j, i
+            if g_clean > g_max:
+                g_max = g_clean
+                g_grad[1] = j, i
+                g_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), 1 - (r + b) / 510
+
+            b_clean = b - r - g
+            if b_clean < b_min:
+                b_min = b_clean
+                b_grad[0] = j, i
+            if b_clean > b_max:
+                b_max = b_clean
+                b_grad[1] = j, i
+                b_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), 1 - (r + g) / 510
+
+    rec = plt.Circle(r_grad[1], min(abs(r_grad[1][0] - r_grad[0][0]), abs(r_grad[1][1] - r_grad[0][1])), fill=False,
+                     lw=lw, color=r_color, zorder=2)
+    rec = sub.add_patch(rec)
+    rec.set_clip_on(True)
+
+    rec = plt.Circle(g_grad[1], min(abs(g_grad[1][0] - g_grad[0][0]), abs(g_grad[1][1] - g_grad[0][1])), fill=False,
+                     lw=lw, color=g_color, zorder=2)
+    rec = sub.add_patch(rec)
+    rec.set_clip_on(True)
+
+    rec = plt.Circle(b_grad[1], min(abs(b_grad[1][0] - b_grad[0][0]), abs(b_grad[1][1] - b_grad[0][1])), fill=False,
+                     lw=lw, color=b_color, zorder=2)
+    rec = sub.add_patch(rec)
+    rec.set_clip_on(True)
 
     vmin, vmax = np.nanmin(weights), np.nanmax(weights)
     if vmin < 0 < vmax:
@@ -122,11 +251,6 @@ def save_frame(fig: plt.Figure, n: int, model: torch.nn.Module, im: np.ndarray, 
         sub.set_axis_off()
         sub.set_frame_on(True)
         sub.imshow(w, cmap=cmap, norm=norm, interpolation='nearest', zorder=1)
-        # ax = sub.axis()
-        # rec = plt.Rectangle((ax[0], ax[2]), ax[1] - ax[0], ax[3] - ax[2], fill=False, lw=.8,
-        #                     linestyle='solid', zorder=0)
-        # rec = sub.add_patch(rec)
-        # rec.set_clip_on(False)
 
     fig.suptitle(f'{n}\n({np.min(losses):.3f})', fontsize=14)
     fig.subplots_adjust(bottom=.1, top=.9, left=0.02, right=.98, wspace=.05, hspace=.05)
@@ -139,28 +263,28 @@ SIZE = 256
 
 def artsy(weights: [torch.Tensor], biases: [torch.Tensor]):
     weights = [
-        weights[0],
-    ] + [
-        weights[3].rot90(),
-        weights[2].rot90().rot90(),
-        weights[1].rot90().rot90().rot90(),
-    ] + [
-        weights[4],
-    ]
+                  weights[0],
+              ] + [
+                  weights[3].rot90(),
+                  weights[2].rot90().rot90(),
+                  weights[1].rot90().rot90().rot90(),
+              ] + [
+                  weights[4],
+              ]
     biases = [
-        biases[0],
-    ] + [
-        biases[3],
-        biases[2],
-        biases[1],
-    ] + [
-        biases[4],
-    ]
+                 biases[0],
+             ] + [
+                 biases[3],
+                 biases[2],
+                 biases[1],
+             ] + [
+                 biases[4],
+             ]
     return weights, biases
 
 
 def train(project: str, n: int, frame: int, threshold: float, model: torch.nn.Module, optimizer: torch.optim.Optimizer,
-          dtype, device, losses) -> int:
+          dtype: torch.dtype, device: torch.device, losses: [float]) -> int:
     path = IMAGE_DIR / f'{project}.png'
     logging.info(f'Loading {path}')
 
@@ -178,10 +302,10 @@ def train(project: str, n: int, frame: int, threshold: float, model: torch.nn.Mo
 
     ref_grid = np.mgrid[0:ref_shape[0], 0:ref_shape[1]]
     ref_x = torch.hstack([
-        torch.tensor(np.array([[i / np.nanmax(ref_grid[0])] for i in ref_grid[0].flatten()]),
+        torch.tensor(np.array([[i / (ref_shape[0] - 1)] for i in ref_grid[0].flatten()]),
                      dtype=dtype,
                      device=device),
-        torch.tensor(np.array([[i / np.nanmax(ref_grid[1])] for i in ref_grid[1].flatten()]),
+        torch.tensor(np.array([[i / (ref_shape[1] - 1)] for i in ref_grid[1].flatten()]),
                      dtype=dtype,
                      device=device),
     ])
@@ -192,7 +316,6 @@ def train(project: str, n: int, frame: int, threshold: float, model: torch.nn.Mo
     # plt.interactive(True)
     fig = plt.figure(figsize=(1920 / DPI, 1080 / DPI), dpi=DPI)
     fig.canvas.draw()
-    step = 0
 
     mse = nn.MSELoss(reduction='mean')
     model.train()
@@ -205,18 +328,20 @@ def train(project: str, n: int, frame: int, threshold: float, model: torch.nn.Mo
             err.backward()
             return err
 
-        for _ in range(n):
-            loss = optimizer.step(closure)
+        for i in range(n):
+            loss: float | torch.Tensor = optimizer.step(closure)
             losses.append(loss.detach().cpu().numpy())
             progress = int(100 * min(1, max(0, (1 - (np.min(losses) - threshold) / (np.max(losses) - threshold)))))
+            change = abs(np.min(losses[-2_000:-1_000]) - np.min(losses[-1_000:])) if i > 2_000 else np.inf
             if pbar.n < progress:
                 pbar.update(progress - pbar.n)
-            if step > 2000 and np.min(losses) < threshold and abs(np.min(losses[-2000:-1000]) -
-                                                                  np.min(losses[-1000:])) < 1:
-                logging.info(f'Step {step} (Frame {frame}) -- Loss: {np.min(losses):.12f} ({progress:d}%)')
+            elif i > 2_000 and np.min(losses) < threshold and change < 1:
+                logging.info(
+                    f'Step {i} (Frame {frame}) -- Loss: {np.min(losses):.12f} ({progress:d}%, {change:.12f})')
                 break
-            if step % 20 == 0:
-                logging.info(f'Step {step} (Frame {frame}) -- Loss: {np.min(losses):.12f} ({progress:d}%)')
+            elif i % 10 == 0:
+                logging.info(
+                    f'Step {i} (Frame {frame}) -- Loss: {np.min(losses):.12f} ({progress:d}%, {change:.12f})')
 
                 art = copy.deepcopy(model)
                 weights, biases = [], []
@@ -237,12 +362,13 @@ def train(project: str, n: int, frame: int, threshold: float, model: torch.nn.Mo
                 art.to(device)
                 art.eval()
 
-                save_frame(fig, step, model,
-                           model.forward(ref_x).detach().cpu().numpy().reshape(ref_shape),
-                           art.forward(ref_x).detach().cpu().numpy().reshape(ref_shape), losses)
-                save_fig(fig, OUTPUT_DIR / project / f'frame_{frame:06d}.png')
+                a = art.forward(ref_x).detach().cpu().numpy().reshape(ref_shape)
+
+                save_frame(fig, i, model, model.forward(ref_x).detach().cpu().numpy().reshape(ref_shape), a, losses)
+                save_fig(fig, OUTPUT_DIR / project / 'frames' / f'frame_{frame:06d}.png')
+                save_art(a, OUTPUT_DIR / project / 'art' / f'frame_{frame:06d}.png')
                 frame += 1
-            step += 1
+            i += 1
 
         art = copy.deepcopy(model)
         weights, biases = [], []
@@ -263,20 +389,21 @@ def train(project: str, n: int, frame: int, threshold: float, model: torch.nn.Mo
         art.to(device)
         art.eval()
 
-        save_frame(fig, step, model,
-                   model.forward(ref_x).detach().cpu().numpy().reshape(ref_shape),
-                   art.forward(ref_x).detach().cpu().numpy().reshape(ref_shape), losses)
-        save_fig(fig, OUTPUT_DIR / project / f'frame_{frame:06d}.png')
+        a = art.forward(ref_x).detach().cpu().numpy().reshape(ref_shape)
+
+        save_frame(fig, i, model, model.forward(ref_x).detach().cpu().numpy().reshape(ref_shape), a, losses)
+        save_fig(fig, OUTPUT_DIR / project / 'frames' / f'frame_{frame:06d}.png')
+        save_art(a, OUTPUT_DIR / project / 'art' / f'frame_{frame:06d}.png')
 
     model.eval()
 
-    eval_shape = 4 * ref_shape[0], 4 * ref_shape[1], ref_shape[2]
+    eval_shape = 8 * ref_shape[0], 8 * ref_shape[1], ref_shape[2]
     eval_grid = np.mgrid[0:eval_shape[0], 0:eval_shape[1]]
 
     eval_x = torch.hstack([
-        torch.tensor(np.array([[i / np.max(eval_grid[0])] for i in eval_grid[0].flatten()]), dtype=dtype,
+        torch.tensor(np.array([[i / (eval_shape[0] - 1)] for i in eval_grid[0].flatten()]), dtype=dtype,
                      device=device),
-        torch.tensor(np.array([[i / np.max(eval_grid[1])] for i in eval_grid[1].flatten()]), dtype=dtype,
+        torch.tensor(np.array([[i / (eval_shape[1] - 1)] for i in eval_grid[1].flatten()]), dtype=dtype,
                      device=device),
     ])
 
@@ -307,15 +434,15 @@ def main() -> None:
 
     model.to(device)
 
-    n = np.iinfo(np.int32).max
-    # n = 1_000_000
+    n = 1_000_000
+
     optimizer = torch.optim.Adam(model.parameters())
     threshold = 100
     frame = 1
     losses = []
 
-    project = PROJECTS[0]
-    train(project, n, frame, threshold, model, optimizer, dtype, device, losses)
+    for project in PROJECTS[:1]:
+        train(project, n, frame, threshold, model, optimizer, dtype, device, losses)
 
 
 if __name__ == '__main__':
