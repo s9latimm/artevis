@@ -4,11 +4,10 @@ import random
 import sys
 from pathlib import Path
 
+import cv2
 import matplotlib
 import matplotlib.pyplot as plt
-from matplotlib.transforms import Bbox
 import numpy as np
-import cv2
 import torch
 from matplotlib import colors
 from torch import nn
@@ -22,6 +21,8 @@ matplotlib.use('TkAgg')
 
 DPI: int = 100
 SCALE: float = 2
+
+GR = (1 + np.sqrt(5)) / 2 - 1
 
 GRAY: plt.Colormap = colors.LinearSegmentedColormap.from_list('gray', plt.get_cmap('gray')(np.linspace(0, 1., 100)))
 SEISMIC: plt.Colormap = colors.LinearSegmentedColormap.from_list('seismic',
@@ -77,65 +78,71 @@ def save_art(art: np.ndarray, path: Path) -> None:
     sub.set_xlim(0, im.shape[1])
     sub.set_ylim(0, im.shape[0])
 
-    r_min, r_max = np.inf, -np.inf
-    r_grad = [(0, 0), (0, 0)]
-    r_color = 0
-
-    g_min, g_max = np.inf, -np.inf
-    g_grad = [(0, 0), (0, 0)]
-    g_color = 0
-
-    b_min, b_max = np.inf, -np.inf
-    b_grad = [(0, 0), (0, 0)]
-    b_color = 0
-
-    lw = max(im.shape[0], im.shape[1]) / 2
-
-    for i in range(art.shape[0]):
-        for j in range(art.shape[1]):
-            b, g, r = art[i][j]
-
-            r_clean = r - g - b
-            if r_clean < r_min:
-                r_min = r_clean
-                r_grad[0] = j, i
-            if r_clean > r_max:
-                r_max = r_clean
-                r_grad[1] = j, i
-                r_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), 1 - (b + g) / 510
-
-            g_clean = g - r - b
-            if g_clean < g_min:
-                g_min = g_clean
-                g_grad[0] = j, i
-            if g_clean > g_max:
-                g_max = g_clean
-                g_grad[1] = j, i
-                g_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), 1 - (r + b) / 510
-
-            b_clean = b - r - g
-            if b_clean < b_min:
-                b_min = b_clean
-                b_grad[0] = j, i
-            if b_clean > b_max:
-                b_max = b_clean
-                b_grad[1] = j, i
-                b_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), 1 - (r + g) / 510
-
-    rec = plt.Circle(r_grad[1], min(abs(r_grad[1][0] - r_grad[0][0]), abs(r_grad[1][1] - r_grad[0][1])), fill=False,
-                     lw=lw, color=r_color, zorder=2)
-    rec = sub.add_patch(rec)
-    rec.set_clip_on(True)
-
-    rec = plt.Circle(g_grad[1], min(abs(g_grad[1][0] - g_grad[0][0]), abs(g_grad[1][1] - g_grad[0][1])), fill=False,
-                     lw=lw, color=g_color, zorder=2)
-    rec = sub.add_patch(rec)
-    rec.set_clip_on(True)
-
-    rec = plt.Circle(b_grad[1], min(abs(b_grad[1][0] - b_grad[0][0]), abs(b_grad[1][1] - b_grad[0][1])), fill=False,
-                     lw=lw, color=b_color, zorder=2)
-    rec = sub.add_patch(rec)
-    rec.set_clip_on(True)
+    # r_min, r_max = np.inf, -np.inf
+    # r_grad = [(0, 0), (0, 0)]
+    # r_color = 0
+    #
+    # g_min, g_max = np.inf, -np.inf
+    # g_grad = [(0, 0), (0, 0)]
+    # g_color = 0
+    #
+    # b_min, b_max = np.inf, -np.inf
+    # b_grad = [(0, 0), (0, 0)]
+    # b_color = 0
+    #
+    # lw = max(im.shape[0], im.shape[1]) / 2
+    #
+    # for i in range(art.shape[0]):
+    #     for j in range(art.shape[1]):
+    #         b, g, r = art[i][j]
+    #
+    #         r_clean = 2 * r - g - b
+    #         if r_clean < r_min:
+    #             r_min = r_clean
+    #             r_grad[0] = j, i
+    #         if r_clean > r_max:
+    #             r_max = r_clean
+    #             r_grad[1] = j, i
+    #             r_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), max(.1, min(.5, r / 510))
+    #
+    #         g_clean = 2 * g - r - b
+    #         if g_clean < g_min:
+    #             g_min = g_clean
+    #             g_grad[0] = j, i
+    #         if g_clean > g_max:
+    #             g_max = g_clean
+    #             g_grad[1] = j, i
+    #             g_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), max(.1, min(.5, g / 510))
+    #
+    #         b_clean = 2 * b - r - g
+    #         if b_clean < b_min:
+    #             b_min = b_clean
+    #             b_grad[0] = j, i
+    #         if b_clean > b_max:
+    #             b_max = b_clean
+    #             b_grad[1] = j, i
+    #             b_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), max(.1, min(.5, b / 510))
+    #
+    # rec = plt.Circle(r_grad[1], max(GR * min(art.shape[0], art.shape[1]),
+    #                                 min(abs(r_grad[1][0] - r_grad[0][0]), abs(r_grad[1][1] - r_grad[0][1]))),
+    #                  fill=False,
+    #                  lw=lw, color=r_color, zorder=2)
+    # rec = sub.add_patch(rec)
+    # rec.set_clip_on(True)
+    #
+    # rec = plt.Circle(g_grad[1], max(GR * min(art.shape[0], art.shape[1]),
+    #                                 min(abs(g_grad[1][0] - g_grad[0][0]), abs(g_grad[1][1] - g_grad[0][1]))),
+    #                  fill=False,
+    #                  lw=lw, color=g_color, zorder=2)
+    # rec = sub.add_patch(rec)
+    # rec.set_clip_on(True)
+    #
+    # rec = plt.Circle(b_grad[1], max(GR * min(art.shape[0], art.shape[1]),
+    #                                 min(abs(b_grad[1][0] - b_grad[0][0]), abs(b_grad[1][1] - b_grad[0][1]))),
+    #                  fill=False,
+    #                  lw=lw, color=b_color, zorder=2)
+    # rec = sub.add_patch(rec)
+    # rec.set_clip_on(True)
 
     fig.subplots_adjust(bottom=0, top=1, left=0, right=1)
     sub.margins(0, 0)
@@ -172,65 +179,71 @@ def save_frame(fig: plt.Figure, n: int, model: torch.nn.Module, im: np.ndarray, 
     sub.set_xlim(0, art.shape[1])
     sub.set_ylim(0, art.shape[0])
 
-    r_min, r_max = np.inf, -np.inf
-    r_grad = [(0, 0), (0, 0)]
-    r_color = 0
-
-    g_min, g_max = np.inf, -np.inf
-    g_grad = [(0, 0), (0, 0)]
-    g_color = 0
-
-    b_min, b_max = np.inf, -np.inf
-    b_grad = [(0, 0), (0, 0)]
-    b_color = 0
-
-    lw = 2
-
-    for i in range(art.shape[0]):
-        for j in range(art.shape[1]):
-            b, g, r = art[i][j]
-
-            r_clean = r - g - b
-            if r_clean < r_min:
-                r_min = r_clean
-                r_grad[0] = j, i
-            if r_clean > r_max:
-                r_max = r_clean
-                r_grad[1] = j, i
-                r_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), 1 - (b + g) / 510
-
-            g_clean = g - r - b
-            if g_clean < g_min:
-                g_min = g_clean
-                g_grad[0] = j, i
-            if g_clean > g_max:
-                g_max = g_clean
-                g_grad[1] = j, i
-                g_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), 1 - (r + b) / 510
-
-            b_clean = b - r - g
-            if b_clean < b_min:
-                b_min = b_clean
-                b_grad[0] = j, i
-            if b_clean > b_max:
-                b_max = b_clean
-                b_grad[1] = j, i
-                b_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), 1 - (r + g) / 510
-
-    rec = plt.Circle(r_grad[1], min(abs(r_grad[1][0] - r_grad[0][0]), abs(r_grad[1][1] - r_grad[0][1])), fill=False,
-                     lw=lw, color=r_color, zorder=2)
-    rec = sub.add_patch(rec)
-    rec.set_clip_on(True)
-
-    rec = plt.Circle(g_grad[1], min(abs(g_grad[1][0] - g_grad[0][0]), abs(g_grad[1][1] - g_grad[0][1])), fill=False,
-                     lw=lw, color=g_color, zorder=2)
-    rec = sub.add_patch(rec)
-    rec.set_clip_on(True)
-
-    rec = plt.Circle(b_grad[1], min(abs(b_grad[1][0] - b_grad[0][0]), abs(b_grad[1][1] - b_grad[0][1])), fill=False,
-                     lw=lw, color=b_color, zorder=2)
-    rec = sub.add_patch(rec)
-    rec.set_clip_on(True)
+    # r_min, r_max = np.inf, -np.inf
+    # r_grad = [(0, 0), (0, 0)]
+    # r_color = 0
+    #
+    # g_min, g_max = np.inf, -np.inf
+    # g_grad = [(0, 0), (0, 0)]
+    # g_color = 0
+    #
+    # b_min, b_max = np.inf, -np.inf
+    # b_grad = [(0, 0), (0, 0)]
+    # b_color = 0
+    #
+    # lw = 2
+    #
+    # for i in range(art.shape[0]):
+    #     for j in range(art.shape[1]):
+    #         b, g, r = art[i][j]
+    #
+    #         r_clean = 2 * r - g - b
+    #         if r_clean < r_min:
+    #             r_min = r_clean
+    #             r_grad[0] = j, i
+    #         if r_clean > r_max:
+    #             r_max = r_clean
+    #             r_grad[1] = j, i
+    #             r_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), max(.1, min(.5, r / 510))
+    #
+    #         g_clean = 2 * g - r - b
+    #         if g_clean < g_min:
+    #             g_min = g_clean
+    #             g_grad[0] = j, i
+    #         if g_clean > g_max:
+    #             g_max = g_clean
+    #             g_grad[1] = j, i
+    #             g_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), max(.1, min(.5, g / 510))
+    #
+    #         b_clean = 2 * b - r - g
+    #         if b_clean < b_min:
+    #             b_min = b_clean
+    #             b_grad[0] = j, i
+    #         if b_clean > b_max:
+    #             b_max = b_clean
+    #             b_grad[1] = j, i
+    #             b_color = min(1, r / 255), min(1, g / 255), min(1, b / 255), max(.1, min(.5, b / 510))
+    #
+    # rec = plt.Circle(r_grad[1], max(GR * min(art.shape[0], art.shape[1]),
+    #                                 min(abs(r_grad[1][0] - r_grad[0][0]), abs(r_grad[1][1] - r_grad[0][1]))),
+    #                  fill=False,
+    #                  lw=lw, color=r_color, zorder=2)
+    # rec = sub.add_patch(rec)
+    # rec.set_clip_on(True)
+    #
+    # rec = plt.Circle(g_grad[1], max(GR * min(art.shape[0], art.shape[1]),
+    #                                 min(abs(g_grad[1][0] - g_grad[0][0]), abs(g_grad[1][1] - g_grad[0][1]))),
+    #                  fill=False,
+    #                  lw=lw, color=g_color, zorder=2)
+    # rec = sub.add_patch(rec)
+    # rec.set_clip_on(True)
+    #
+    # rec = plt.Circle(b_grad[1], max(GR * min(art.shape[0], art.shape[1]),
+    #                                 min(abs(b_grad[1][0] - b_grad[0][0]), abs(b_grad[1][1] - b_grad[0][1]))),
+    #                  fill=False,
+    #                  lw=lw, color=b_color, zorder=2)
+    # rec = sub.add_patch(rec)
+    # rec.set_clip_on(True)
 
     vmin, vmax = np.nanmin(weights), np.nanmax(weights)
     if vmin < 0 < vmax:
@@ -263,23 +276,23 @@ SIZE = 256
 
 def artsy(weights: [torch.Tensor], biases: [torch.Tensor]):
     weights = [
-                  weights[0],
-              ] + [
-                  weights[3].rot90(),
-                  weights[2].rot90().rot90(),
-                  weights[1].rot90().rot90().rot90(),
-              ] + [
-                  weights[4],
-              ]
+        weights[0],
+    ] + [
+        weights[3].rot90(),
+        weights[2].rot90().rot90(),
+        weights[1].rot90().rot90().rot90(),
+    ] + [
+        weights[4],
+    ]
     biases = [
-                 biases[0],
-             ] + [
-                 biases[3],
-                 biases[2],
-                 biases[1],
-             ] + [
-                 biases[4],
-             ]
+        biases[0],
+    ] + [
+        biases[3],
+        biases[2],
+        biases[1],
+    ] + [
+        biases[4],
+    ]
     return weights, biases
 
 
@@ -302,12 +315,8 @@ def train(project: str, n: int, frame: int, threshold: float, model: torch.nn.Mo
 
     ref_grid = np.mgrid[0:ref_shape[0], 0:ref_shape[1]]
     ref_x = torch.hstack([
-        torch.tensor(np.array([[i / (ref_shape[0] - 1)] for i in ref_grid[0].flatten()]),
-                     dtype=dtype,
-                     device=device),
-        torch.tensor(np.array([[i / (ref_shape[1] - 1)] for i in ref_grid[1].flatten()]),
-                     dtype=dtype,
-                     device=device),
+        torch.tensor(np.array([[i / (ref_shape[0] - 1)] for i in ref_grid[0].flatten()]), dtype=dtype, device=device),
+        torch.tensor(np.array([[i / (ref_shape[1] - 1)] for i in ref_grid[1].flatten()]), dtype=dtype, device=device),
     ])
 
     logging.info(f'x: {ref_x.shape}')
@@ -336,12 +345,10 @@ def train(project: str, n: int, frame: int, threshold: float, model: torch.nn.Mo
             if pbar.n < progress:
                 pbar.update(progress - pbar.n)
             elif i > 2_000 and np.min(losses) < threshold and change < 1:
-                logging.info(
-                    f'Step {i} (Frame {frame}) -- Loss: {np.min(losses):.12f} ({progress:d}%, {change:.12f})')
+                logging.info(f'Step {i} (Frame {frame}) -- Loss: {np.min(losses):.12f} ({progress:d}%, {change:.12f})')
                 break
             elif i % 10 == 0:
-                logging.info(
-                    f'Step {i} (Frame {frame}) -- Loss: {np.min(losses):.12f} ({progress:d}%, {change:.12f})')
+                logging.info(f'Step {i} (Frame {frame}) -- Loss: {np.min(losses):.12f} ({progress:d}%, {change:.12f})')
 
                 art = copy.deepcopy(model)
                 weights, biases = [], []
@@ -397,17 +404,17 @@ def train(project: str, n: int, frame: int, threshold: float, model: torch.nn.Mo
 
     model.eval()
 
+    save_image(model.forward(ref_x).detach().cpu().numpy().reshape(ref_shape), OUTPUT_DIR / project / 'output.png')
+
     eval_shape = 8 * ref_shape[0], 8 * ref_shape[1], ref_shape[2]
     eval_grid = np.mgrid[0:eval_shape[0], 0:eval_shape[1]]
 
     eval_x = torch.hstack([
-        torch.tensor(np.array([[i / (eval_shape[0] - 1)] for i in eval_grid[0].flatten()]), dtype=dtype,
-                     device=device),
-        torch.tensor(np.array([[i / (eval_shape[1] - 1)] for i in eval_grid[1].flatten()]), dtype=dtype,
-                     device=device),
+        torch.tensor(np.array([[i / (eval_shape[0] - 1)] for i in eval_grid[0].flatten()]), dtype=dtype, device=device),
+        torch.tensor(np.array([[i / (eval_shape[1] - 1)] for i in eval_grid[1].flatten()]), dtype=dtype, device=device),
     ])
 
-    save_image(model.forward(eval_x).detach().cpu().numpy().reshape(eval_shape), OUTPUT_DIR / project / 'output.png')
+    save_image(model.forward(eval_x).detach().cpu().numpy().reshape(eval_shape), OUTPUT_DIR / project / 'eval.png')
     save_art(art.forward(eval_x).detach().cpu().numpy().reshape(eval_shape), OUTPUT_DIR / project / 'art.png')
 
     return frame
@@ -420,28 +427,28 @@ def main() -> None:
     dtype = torch.float32
     layer = SIZE
 
-    model = nn.Sequential()
-    model.append(nn.Linear(2, layer, bias=True, dtype=dtype))
-    model.append(nn.Tanh())
-    model.append(nn.Linear(layer, layer, bias=True, dtype=dtype))
-    model.append(nn.Tanh())
-    model.append(nn.Linear(layer, layer, bias=True, dtype=dtype))
-    model.append(nn.Tanh())
-    model.append(nn.Linear(layer, layer, bias=True, dtype=dtype))
-    model.append(nn.Tanh())
-    model.append(nn.Linear(layer, 3, bias=True, dtype=dtype))
-    logging.info(model)
+    for project in PROJECTS:
+        model = nn.Sequential()
+        model.append(nn.Linear(2, layer, bias=True, dtype=dtype))
+        model.append(nn.Tanh())
+        model.append(nn.Linear(layer, layer, bias=True, dtype=dtype))
+        model.append(nn.Tanh())
+        model.append(nn.Linear(layer, layer, bias=True, dtype=dtype))
+        model.append(nn.Tanh())
+        model.append(nn.Linear(layer, layer, bias=True, dtype=dtype))
+        model.append(nn.Tanh())
+        model.append(nn.Linear(layer, 3, bias=True, dtype=dtype))
+        logging.info(model)
 
-    model.to(device)
+        model.to(device)
 
-    n = 1_000_000
+        n = 1_000_000
 
-    optimizer = torch.optim.Adam(model.parameters())
-    threshold = 100
-    frame = 1
-    losses = []
+        optimizer = torch.optim.Adam(model.parameters())
+        threshold = 100
+        frame = 1
+        losses = []
 
-    for project in PROJECTS[:1]:
         train(project, n, frame, threshold, model, optimizer, dtype, device, losses)
 
 
