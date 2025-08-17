@@ -36,7 +36,7 @@ SEISMIC_POSITIVE: plt.Colormap = colors.LinearSegmentedColormap.from_list(
 
 OUTPUT_DIR: Path = Path(__file__).parents[1] / 'output'
 IMAGE_DIR: Path = Path(__file__).parents[1] / 'images'
-PROJECTS = ['mona-lisa_1080', 'girl_1080', 'nebelmeer_1080', 'schrei_1080', 'sterne_1080']
+PROJECTS = ['monalisa', 'mond', 'nebelmeer', 'schrei', 'galaxie']
 
 
 def save_fig(fig: plt.Figure, path: Path, dpi: float = DPI) -> None:

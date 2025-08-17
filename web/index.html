@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Artevis</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    canvas { image-rendering: pixelated; }
+    .dragging { opacity: .6; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900">
+  <header class="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+      <h1 class="text-xl md:text-2xl font-semibold">Artevis</h1>
+      <div class="flex items-center gap-3">
+        <label class="block">
+          <span class="text-sm text-slate-600">Modell</span>
+          <select id="modelSelect" class="mt-1 px-3 py-2 rounded-xl border border-slate-300 min-w-[16rem]"></select>
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <div id="status" class="text-sm text-slate-600"></div>
+
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      <div>
+        <h2 class="text-lg font-semibold mb-3">Gewichte zwischen den verborgenen Schichten</h2>
+        <p class="text-sm text-slate-600 mb-4">Drehen, transponieren, horizontal/vertikal flippen und per Drag&Drop die Reihenfolge tauschen. Änderungen wirken auf das Rendern.</p>
+        <div id="weightsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+        <div class="mt-4">
+          <button id="resetBtn" class="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300">Zurücksetzen</button>
+        </div>
+      </div>
+
+      <div class="lg:sticky lg:top-[72px] space-y-3">
+        <h2 class="text-lg font-semibold">Ausgabebild</h2>
+        <canvas id="outCanvas" class="w-full max-w-full rounded-xl border border-slate-200 shadow"></canvas>
+        <div class="flex items-center gap-3">
+          <button id="renderBtn" class="px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">Neu rendern</button>
+          <button id="downloadBtn" class="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300">Bild speichern</button>
+          <span id="spinner" class="hidden text-sm text-slate-600">… rendere</span>
+        </div>
+        <div id="sizeInfo" class="text-xs text-slate-500"></div>
+        <div id="backendInfo" class="text-xs text-slate-500"></div>
+        <div id="hintInfo" class="text-xs text-amber-600"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const MANIFEST_DIR = new URL('./models/', location.href);
+    const MANIFEST_URL = new URL('manifest.json', MANIFEST_DIR);
+
+    const $ = (q) => document.querySelector(q);
+    const statusEl = $('#status');
+    const modelSelect = $('#modelSelect');
+    const weightsGrid = $('#weightsGrid');
+    const outCanvas = $('#outCanvas');
+    const renderBtn = $('#renderBtn');
+    const downloadBtn = $('#downloadBtn');
+    const resetBtn = $('#resetBtn');
+    const spinner = $('#spinner');
+    const sizeInfo = $('#sizeInfo');
+    const backendInfo = $('#backendInfo');
+    const hintInfo = $('#hintInfo');
+
+    const fmt = (msg)=> statusEl.textContent = msg;
+    const clamp = (x,a,b)=> Math.max(a, Math.min(b, x));
+
+    (function(){
+      const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      if (location.protocol !== 'https:' && !isLocalhost) {
+        hintInfo.textContent = 'Tipp: Für stabile GPU-APIs diese Seite über https oder http://localhost laden.';
+      }
+    })();
+
+    function rot90(m){ const h=m.length,w=m[0].length; const o=Array.from({length:w},()=>Array(h)); for(let y=0;y<h;y++)for(let x=0;x<w;x++)o[x][h-1-y]=m[y][x]; return o; }
+    function transpose(m){ const h=m.length,w=m[0].length; const o=Array.from({length:w},()=>Array(h)); for(let y=0;y<h;y++)for(let x=0;x<w;x++)o[x][y]=m[y][x]; return o; }
+    function flipH(m){ const h=m.length,w=m[0].length; const o=Array.from({length:h},()=>Array(w)); for(let y=0;y<h;y++)for(let x=0;x<w;x++)o[y][w-1-x]=m[y][x]; return o; }
+    function flipV(m){ const h=m.length,w=m[0].length; const o=Array.from({length:h},()=>Array(w)); for(let y=0;y<h;y++)for(let x=0;x<w;x++)o[h-1-y][x]=m[y][x]; return o; }
+
+    function applyOps(m,o){
+      let out=m; const k=((o.rot90||0)%4+4)%4; for(let i=0;i<k;i++) out=rot90(out);
+      if(o.transpose) out=transpose(out);
+      if(o.flip_h) out=flipH(out);
+      if(o.flip_v) out=flipV(out);
+      return out;
+    }
+
+    function getLinearIdx(layers){ const idx=[]; for(let i=0;i<layers.length;i++) if(layers[i]?.W&&layers[i]?.b) idx.push(i); return idx; }
+    function getInternalTriplet(layers){
+      const L=getLinearIdx(layers);
+      if(L.length<5) throw new Error('Modell erwartet 5 Linear-Layer (2→H, H→H, H→H, H→H, H→3).');
+      return [L[1],L[2],L[3]];
+    }
+
+    function colorSeismic(val, A){
+      const t=(val+A)/(2*A), tt=clamp(t,0,1);
+      if(tt<=.5){ const u=tt/.5; return [255*u|0, 255*u|0, 255, 255]; }
+      const u=(tt-.5)/.5; return [255, (255*(1-u))|0, (255*(1-u))|0, 255];
+    }
+    function drawHeatmap(canvas, mat, vmin, vmax){
+      const h=mat.length,w=mat[0].length; canvas.width=w; canvas.height=h;
+      const ctx=canvas.getContext('2d'); const img=ctx.createImageData(w,h);
+      const A=Math.max(Math.abs(vmin),Math.abs(vmax))||1; let k=0;
+      for(let y=0;y<h;y++){ const row=mat[y]; for(let x=0;x<w;x++){ const [r,g,b,a]=colorSeismic(row[x],A); img.data[k++]=r;img.data[k++]=g;img.data[k++]=b;img.data[k++]=a; } }
+      ctx.putImageData(img,0,0);
+    }
+    function computeMinMax(mats){
+      let mn=Infinity,mx=-Infinity;
+      mats.forEach(M=>{ const h=M.length,w=M[0].length; for(let y=0;y<h;y++)for(let x=0;x<w;x++){ const v=M[y][x]; if(v<mn) mn=v; if(v>mx) mx=v; } });
+      return [mn,mx];
+    }
+
+    function buildWorkingLayers(baseLayers, opsTriplet, orderTriplet){
+      const layers = JSON.parse(JSON.stringify(baseLayers));
+      const [a,b,c] = getInternalTriplet(layers);
+      const idxs=[a,b,c];
+      const mats = idxs.map(i=>layers[i].W), bs = idxs.map(i=>layers[i].b);
+      const matsOps = mats.map((m,i)=>applyOps(m, opsTriplet[i]||{}));
+      const matsRe = [matsOps[opsState[activeModel].order[0]], matsOps[opsState[activeModel].order[1]], matsOps[opsState[activeModel].order[2]]];
+      const bsRe   = [bs[opsState[activeModel].order[0]],   bs[opsState[activeModel].order[1]],   bs[opsState[activeModel].order[2]]];
+      for(let k=0;k<3;k++){ layers[idxs[k]].W = matsRe[k]; layers[idxs[k]].b = bsRe[k]; }
+      return layers;
+    }
+
+    const TANH_MIN=-3.0, TANH_MAX=3.0, TANH_LUT_N=4096;
+    const TANH_LUT=new Float32Array(TANH_LUT_N+1);
+    for(let i=0;i<=TANH_LUT_N;i++){ const x=TANH_MIN + (i*(TANH_MAX-TANH_MIN)/TANH_LUT_N); TANH_LUT[i]=Math.tanh(x); }
+    function fastTanh(x){ if(x<=TANH_MIN) return TANH_LUT[0]; if(x>=TANH_MAX) return TANH_LUT[TANH_LUT_N];
+      const t=(x-TANH_MIN)*TANH_LUT_N/(TANH_MAX-TANH_MIN), i=t|0, f=t-i; return TANH_LUT[i]+f*(TANH_LUT[i+1]-TANH_LUT[i]); }
+    function flattenMatrix2D(M){ const rows=M.length, cols=M[0].length; const out=new Float32Array(rows*cols); let k=0;
+      for(let r=0;r<rows;r++){ const mr=M[r]; for(let c=0;c<cols;c++) out[k++]=mr[c]; } return {data:out, rows, cols}; }
+    function flattenVector1D(v){ const out=new Float32Array(v.length); for(let i=0;i<v.length;i++) out[i]=v[i]; return out; }
+    function buildFlatLayers(layers){
+      const flat=[]; for(const L of layers){
+        if(L.W&&L.b){ const Wf=flattenMatrix2D(L.W); const bf=flattenVector1D(L.b);
+          flat.push({type:'linear', W:Wf.data, rows:Wf.rows, cols:Wf.cols, b:bf});
+        }else if(L.act==='tanh'){ flat.push({type:'tanh'}); }
+      } return flat;
+    }
+    function matVecFlat(W, rows, cols, v, out){ let rBase=0; for(let r=0;r<rows;r++){ let sum=0.0, k=rBase; for(let c=0;c<cols;c++) sum+=W[k++]*v[c]; out[r]=sum; rBase+=cols; } }
+    function addBiasFlat(v,b){ for(let i=0;i<v.length;i++) v[i]+=b[i]; }
+    function tanhVecFast(v){ for(let i=0;i<v.length;i++) v[i]=fastTanh(v[i]); }
+    function forwardOneFlat(flatLayers, bufA, bufB){
+      let v=bufA, w=bufB;
+      for(const L of flatLayers){
+        if(L.type==='linear'){ matVecFlat(L.W, L.rows, L.cols, v, w); addBiasFlat(w, L.b); const t=v; v=w; w=t; }
+        else if(L.type==='tanh'){ tanhVecFast(v); }
+      }
+      return v;
+    }
+
+    /* -------------------- WebGL2 Fallback -------------------- */
+    const GL_MAX = 1024;
+    const GL_FS = `#version 300 es
+      precision highp float;
+      uniform int uWidth, uHeight;
+      uniform int uH;
+      uniform sampler2D uW0; uniform sampler2D uW1; uniform sampler2D uW2; uniform sampler2D uW3; uniform sampler2D uW4;
+      uniform sampler2D uB0; uniform sampler2D uB1; uniform sampler2D uB2; uniform sampler2D uB3; uniform sampler2D uB4;
+      out vec4 fragColor;
+      float ftanh(float x){ return tanh(x); }
+      float texW(sampler2D T, int row, int col, int cols){ return texelFetch(T, ivec2(col,row), 0).r; }
+      float texB(sampler2D T, int i){ return texelFetch(T, ivec2(i,0), 0).r; }
+      void main(){
+        ivec2 coord = ivec2(gl_FragCoord.xy) - ivec2(1,1);
+        int x = coord.x; int y = coord.y;
+        float xf = (uWidth  > 1) ? float(x)/float(uWidth-1)  : 0.0;
+        float yf = (uHeight > 1) ? float(y)/float(uHeight-1) : 0.0;
+        float v1[${GL_MAX}];
+        for(int i=0;i<${GL_MAX};++i){ if(i>=uH) break;
+          float s = texW(uW0,i,0,2)*yf + texW(uW0,i,1,2)*xf + texB(uB0,i);
+          v1[i] = ftanh(s);
+        }
+        float v2[${GL_MAX}];
+        for(int i=0;i<${GL_MAX};++i){ if(i>=uH) break;
+          float sum=0.0;
+          for(int j=0;j<${GL_MAX};++j){ if(j>=uH) break; sum += texW(uW1,i,j,uH)*v1[j]; }
+          v2[i] = ftanh(sum + texB(uB1,i));
+        }
+        float v3[${GL_MAX}];
+        for(int i=0;i<${GL_MAX};++i){ if(i>=uH) break;
+          float sum=0.0;
+          for(int j=0;j<${GL_MAX};++j){ if(j>=uH) break; sum += texW(uW2,i,j,uH)*v2[j]; }
+          v3[i] = ftanh(sum + texB(uB2,i));
+        }
+        float v4[${GL_MAX}];
+        for(int i=0;i<${GL_MAX};++i){ if(i>=uH) break;
+          float sum=0.0;
+          for(int j=0;j<${GL_MAX};++j){ if(j>=uH) break; sum += texW(uW3,i,j,uH)*v3[j]; }
+          v4[i] = ftanh(sum + texB(uB3,i));
+        }
+        float r=0.0,g=0.0,b=0.0;
+        for(int j=0;j<${GL_MAX};++j){ if(j>=uH) break; r += texW(uW4,0,j,uH)*v4[j]; }
+        for(int j=0;j<${GL_MAX};++j){ if(j>=uH) break; g += texW(uW4,1,j,uH)*v4[j]; }
+        for(int j=0;j<${GL_MAX};++j){ if(j>=uH) break; b += texW(uW4,2,j,uH)*v4[j]; }
+        r += texB(uB4,0); g += texB(uB4,1); b += texB(uB4,2);
+        fragColor = vec4(clamp(r,0.0,255.0)/255.0, clamp(g,0.0,255.0)/255.0, clamp(b,0.0,255.0)/255.0, 1.0);
+      }`;
+
+    function createGLTexture(gl, width, height, data=null){
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, width, height, 0, gl.RED, gl.FLOAT, data ? new Float32Array(data) : null);
+      return tex;
+    }
+
+    function glRenderOnce(canvas, W, H, hidden, flat){
+      const gl = canvas.getContext('webgl2') || canvas.getContext('experimental-webgl2');
+      if(!gl) throw new Error('WebGL2 nicht verfügbar');
+
+      const vs = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(vs, `#version 300 es
+        in vec2 aPos; void main(){ gl_Position = vec4(aPos,0.0,1.0); }`);
+      gl.compileShader(vs);
+      if(!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(vs)||'VS error');
+
+      const fs = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(fs, GL_FS);
+      gl.compileShader(fs);
+      if(!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(fs)||'FS error');
+
+      const prog = gl.createProgram();
+      gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+      if(!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog)||'link error');
+
+      const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+      const vbo = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,-1, 1,1, -1,1]), gl.STATIC_DRAW);
+      const aPos = gl.getAttribLocation(prog,'aPos');
+      gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0); gl.enableVertexAttribArray(aPos);
+
+      const [L0,L1,L2,L3,L4] = flat.filter(l=>l.type==='linear');
+      const texW0 = createGLTexture(gl, L0.cols, L0.rows, L0.W);
+      const texW1 = createGLTexture(gl, L1.cols, L1.rows, L1.W);
+      const texW2 = createGLTexture(gl, L2.cols, L2.rows, L2.W);
+      const texW3 = createGLTexture(gl, L3.cols, L3.rows, L3.W);
+      const texW4 = createGLTexture(gl, L4.cols, L4.rows, L4.W);
+      const texB0 = createGLTexture(gl, L0.rows, 1, L0.b);
+      const texB1 = createGLTexture(gl, L1.rows, 1, L1.b);
+      const texB2 = createGLTexture(gl, L2.rows, 1, L2.b);
+      const texB3 = createGLTexture(gl, L3.rows, 1, L3.b);
+      const texB4 = createGLTexture(gl, 3, 1, L4.b);
+
+      gl.useProgram(prog);
+      const bindTex=(unit, name, tex)=>{ gl.activeTexture(gl.TEXTURE0+unit); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(gl.getUniformLocation(prog,name), unit); };
+      bindTex(0,'uW0',texW0); bindTex(1,'uW1',texW1); bindTex(2,'uW2',texW2); bindTex(3,'uW3',texW3); bindTex(4,'uW4',texW4);
+      bindTex(5,'uB0',texB0); bindTex(6,'uB1',texB1); bindTex(7,'uB2',texB2); bindTex(8,'uB3',texB3); bindTex(9,'uB4',texB4);
+
+      gl.uniform1i(gl.getUniformLocation(prog,'uWidth'),  W);
+      gl.uniform1i(gl.getUniformLocation(prog,'uHeight'), H);
+      gl.uniform1i(gl.getUniformLocation(prog,'uH'), hidden);
+
+      gl.viewport(0,0,W,H);
+      gl.clearColor(0,0,0,1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      // Cleanup (verhindert VRAM-Growth)
+      gl.deleteTexture(texW0); gl.deleteTexture(texW1); gl.deleteTexture(texW2); gl.deleteTexture(texW3); gl.deleteTexture(texW4);
+      gl.deleteTexture(texB0); gl.deleteTexture(texB1); gl.deleteTexture(texB2); gl.deleteTexture(texB3); gl.deleteTexture(texB4);
+      gl.deleteBuffer(vbo); gl.deleteVertexArray(vao);
+      gl.deleteProgram(prog); gl.deleteShader(vs); gl.deleteShader(fs);
+    }
+
+    /* -------------------- WebGPU persistent -------------------- */
+    const WGSL = `
+  struct Params { data : array<vec4<u32>, 16>, };
+  @group(0) @binding(0) var<uniform> U : Params;
+  @group(0) @binding(1) var<storage, read>  WAll : array<f32>;
+  @group(0) @binding(2) var<storage, read>  BAll : array<f32>;
+  @group(0) @binding(3) var outTex : texture_storage_2d<rgba8unorm, write>;
+
+  fn U32(i:u32) -> u32 {
+    let v = U.data[i / 4u];
+    let k = i % 4u;
+    return select(select(v.x, v.y, k==1u), select(v.z, v.w, k==3u), k>=2u);
+  }
+
+  // Schnelle, stabile tanh-Approx (0.5% rel. Fehler im üblichen Bereich)
+  fn ftanh(x:f32) -> f32 {
+    // clamp begrenzt Overflow/NANs auf GPUs mit krudem FastMath
+    let xc = clamp(x, -5.0, 5.0);
+    let x2 = xc * xc;
+    // Remez-ähnlich: x*(27 + x^2) / (27 + 9 x^2)
+    return (xc * (27.0 + x2)) / (27.0 + 9.0 * x2);
+  }
+
+  @compute @workgroup_size(8, 8, 1)   // konservativer als 16x16
+  fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let W  : u32 = U32(0u);
+    let Hh : u32 = U32(1u);
+    let n  : u32 = U32(2u);
+    if (gid.x >= W || gid.y >= Hh) { return; }
+
+    let w0_off : u32 = U32(3u);
+    let w1_off : u32 = U32(4u);
+    let w2_off : u32 = U32(5u);
+    let w3_off : u32 = U32(6u);
+    let w4_off : u32 = U32(7u);
+    let b0_off : u32 = U32(8u);
+    let b1_off : u32 = U32(9u);
+    let b2_off : u32 = U32(10u);
+    let b3_off : u32 = U32(11u);
+    let b4_off : u32 = U32(12u);
+
+    let xf = select(0.0, f32(gid.x)/f32(max(1u, W-1u)),  W>1u);
+    let yf = select(0.0, f32(gid.y)/f32(max(1u, Hh-1u)), Hh>1u);
+
+    // Lokale Register-Arrays (zero-init)
+    var v1: array<f32, 1024>;
+    for (var i:u32=0u; i<n; i++){
+      let s = WAll[w0_off + i*2u + 0u]*yf
+            + WAll[w0_off + i*2u + 1u]*xf
+            + BAll[b0_off + i];
+      v1[i] = ftanh(s);
+    }
+
+    var v2: array<f32, 1024>;
+    for (var i:u32=0u; i<n; i++){
+      var sum:f32 = 0.0;
+      let row = w1_off + i*n;
+      for (var j:u32=0u; j<n; j++){ sum += WAll[row + j]*v1[j]; }
+      v2[i] = ftanh(sum + BAll[b1_off + i]);
+    }
+
+    var v3: array<f32, 1024>;
+    for (var i:u32=0u; i<n; i++){
+      var sum:f32 = 0.0;
+      let row = w2_off + i*n;
+      for (var j:u32=0u; j<n; j++){ sum += WAll[row + j]*v2[j]; }
+      v3[i] = ftanh(sum + BAll[b2_off + i]);
+    }
+
+    var v4: array<f32, 1024>;
+    for (var i:u32=0u; i<n; i++){
+      var sum:f32 = 0.0;
+      let row = w3_off + i*n;
+      for (var j:u32=0u; j<n; j++){ sum += WAll[row + j]*v3[j]; }
+      v4[i] = ftanh(sum + BAll[b3_off + i]);
+    }
+
+    var r:f32 = 0.0; var g:f32 = 0.0; var b:f32 = 0.0;
+    let rrow = w4_off + 0u*n;
+    let grow = w4_off + 1u*n;
+    let brow = w4_off + 2u*n;
+    for (var j:u32=0u; j<n; j++){
+      r += WAll[rrow + j]*v4[j];
+      g += WAll[grow + j]*v4[j];
+      b += WAll[brow + j]*v4[j];
+    }
+
+    // numerisch robust clampen
+    let color = vec4<f32>(
+      clamp(r + BAll[b4_off + 0u], 0.0, 255.0) / 255.0,
+      clamp(g + BAll[b4_off + 1u], 0.0, 255.0) / 255.0,
+      clamp(b + BAll[b4_off + 2u], 0.0, 255.0) / 255.0,
+      1.0
+    );
+    textureStore(outTex, vec2<i32>(gid.xy), color);
+  }
+`;
+
+
+    function concatFloat32(arrays){
+      let total = 0; for(const a of arrays) total += a.length;
+      const out = new Float32Array(total);
+      let o=0; for(const a of arrays){ out.set(a, o); o += a.length; }
+      return out;
+    }
+
+    const WebGPU = {
+      device:null, queue:null, module:null, bgl:null, pipeline:null,
+      bufParams:null, bufWAll:null, bufBAll:null,
+      outTex:null, outRead:null,
+      alloc:{W:0,H:0,wSize:0,bSize:0,bytesPerRow:0},
+
+      async ensureDevice(){
+        if(this.device) return;
+        if(!('gpu' in navigator)) throw new Error('WebGPU nicht verfügbar');
+        const adapter = await navigator.gpu.requestAdapter();
+        if(!adapter) throw new Error('Kein WebGPU-Adapter');
+        this.device = await adapter.requestDevice();
+        this.queue  = this.device.queue;
+        this.module = this.device.createShaderModule({ code: WGSL });
+        this.bgl = this.device.createBindGroupLayout({
+          entries:[
+            {binding:0, visibility:GPUShaderStage.COMPUTE, buffer:{type:'uniform'}},
+            {binding:1, visibility:GPUShaderStage.COMPUTE, buffer:{type:'read-only-storage'}},
+            {binding:2, visibility:GPUShaderStage.COMPUTE, buffer:{type:'read-only-storage'}},
+            {binding:3, visibility:GPUShaderStage.COMPUTE, storageTexture:{access:'write-only', format:'rgba8unorm'}},
+          ]
+        });
+        this.pipeline = this.device.createComputePipeline({
+          layout: this.device.createPipelineLayout({ bindGroupLayouts:[this.bgl] }),
+          compute: { module:this.module, entryPoint:'main' }
+        });
+        this.bufParams = this.device.createBuffer({ size:256, usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST });
+      },
+
+      ensureBuffers(W,H,wBytes,bBytes){
+        const dev = this.device;
+        // pack buffers
+        if(!this.bufWAll || this.alloc.wSize < wBytes){
+          this.bufWAll?.destroy();
+          this.bufWAll = dev.createBuffer({ size:Math.max(4, wBytes), usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST });
+          this.alloc.wSize = Math.max(4, wBytes);
+        }
+        if(!this.bufBAll || this.alloc.bSize < bBytes){
+          this.bufBAll?.destroy();
+          this.bufBAll = dev.createBuffer({ size:Math.max(4, bBytes), usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST });
+          this.alloc.bSize = Math.max(4, bBytes);
+        }
+        // output texture + readback buffer (bytesPerRow 256-aligned)
+        const bytesPerRow = ((W*4 + 255) & ~255);
+        if(!this.outTex || this.alloc.W!==W || this.alloc.H!==H){
+          this.outTex?.destroy();
+          this.outTex = dev.createTexture({
+            size:{width:W, height:H},
+            format:'rgba8unorm',
+            usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC
+          });
+          this.alloc.W=W; this.alloc.H=H;
+        }
+        if(!this.outRead || this.alloc.bytesPerRow!==bytesPerRow){
+          this.outRead?.destroy();
+          this.outRead = dev.createBuffer({
+            size: bytesPerRow*H,
+            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+          });
+          this.alloc.bytesPerRow = bytesPerRow;
+        }
+      },
+
+      bindGroup(){
+        return this.device.createBindGroup({
+          layout:this.bgl,
+          entries:[
+            {binding:0, resource:{buffer:this.bufParams}},
+            {binding:1, resource:{buffer:this.bufWAll}},
+            {binding:2, resource:{buffer:this.bufBAll}},
+            {binding:3, resource:this.outTex.createView()}
+          ]
+        });
+      },
+
+async render(W,H,hidden,L0,L1,L2,L3,L4){
+  await this.ensureDevice();
+
+  const w0_off=0, w1_off=w0_off+L0.W.length, w2_off=w1_off+L1.W.length, w3_off=w2_off+L2.W.length, w4_off=w3_off+L3.W.length;
+  const b0_off=0, b1_off=b0_off+L0.b.length, b2_off=b1_off+L1.b.length, b3_off=b2_off+L2.b.length, b4_off=b3_off+L3.b.length;
+
+  const WAll = concatFloat32([L0.W, L1.W, L2.W, L3.W, L4.W]);
+  const BAll = concatFloat32([L0.b, L1.b, L2.b, L3.b, L4.b]);
+
+  this.ensureBuffers(W,H,WAll.byteLength,BAll.byteLength);
+
+  const U = new Uint32Array(64);
+  U[0]=W; U[1]=H; U[2]=hidden;
+  U[3]=w0_off; U[4]=w1_off; U[5]=w2_off; U[6]=w3_off; U[7]=w4_off;
+  U[8]=b0_off; U[9]=b1_off; U[10]=b2_off; U[11]=b3_off; U[12]=b4_off;
+
+  this.queue.writeBuffer(this.bufParams,0,U);
+  this.queue.writeBuffer(this.bufWAll,0,WAll);
+  this.queue.writeBuffer(this.bufBAll,0,BAll);
+
+  // Error-Scopes (sichtbar im DevTools-Log)
+  this.device.pushErrorScope('validation');
+  this.device.pushErrorScope('out-of-memory');
+  this.device.pushErrorScope('internal');
+
+  const enc = this.device.createCommandEncoder();
+  const pass = enc.beginComputePass();
+  pass.setPipeline(this.pipeline);
+  pass.setBindGroup(0, this.bindGroup());
+  pass.dispatchWorkgroups(Math.ceil(W/8), Math.ceil(H/8), 1);
+  pass.end();
+
+  enc.copyTextureToBuffer(
+    { texture:this.outTex },
+    { buffer:this.outRead, bytesPerRow:this.alloc.bytesPerRow },
+    { width:W, height:H }
+  );
+  this.queue.submit([enc.finish()]);
+  await this.queue.onSubmittedWorkDone();
+
+  // Fehler abholen (falls vorhanden)
+  const errs = await Promise.all([
+    this.device.popErrorScope(), this.device.popErrorScope(), this.device.popErrorScope()
+  ]);
+  for (const e of errs) { if (e) { console.warn('WebGPU error:', e.message || e); } }
+
+  await this.outRead.mapAsync(GPUMapMode.READ);
+  const mapped = this.outRead.getMappedRange();
+  const rowStride = this.alloc.bytesPerRow;
+  const out = new Uint8ClampedArray(W*H*4);
+  let dst=0, src=0;
+  for(let y=0;y<H;y++){
+    out.set(new Uint8Array(mapped, src, W*4), dst);
+    src += rowStride; dst += W*4;
+  }
+  this.outRead.unmap();
+  return out;
+}
+
+    };
+
+    /* -------------------- App State & UI -------------------- */
+    let models = [];
+    let activeModel = -1;
+    let opsState = [];
+    let targetSize = {w:256, h:256};
+    let flatLayersCache = null;
+    let cpuBufA=null, cpuBufB=null, imgData=null;
+
+    function populateModelSelect(){
+      modelSelect.innerHTML='';
+      models.forEach((m,i)=>{ const opt=document.createElement('option'); opt.value=String(i); opt.textContent=m.name; modelSelect.appendChild(opt); });
+    }
+
+    function buildCards(){
+      weightsGrid.innerHTML='';
+      if(activeModel<0) return;
+      const mdl=models[activeModel];
+      const layers=mdl.layers;
+      const [i1,i2,i3]=getInternalTriplet(layers);
+      const idxs=[i1,i2,i3];
+      const mats=idxs.map(i=>layers[i].W);
+      const matsOps=mats.map((m,i)=>applyOps(m, opsState[activeModel].opsTriplet[i]));
+      const matsRe=[matsOps[opsState[activeModel].order[0]], matsOps[opsState[activeModel].order[1]], matsOps[opsState[activeModel].order[2]]];
+      const [vmin,vmax]=computeMinMax(matsRe);
+
+      matsRe.forEach((mat, kDisplay) => {
+        const kOrig = opsState[activeModel].order[kDisplay];
+        const card=document.createElement('div');
+        card.className='group relative rounded-2xl border border-slate-200 bg-white shadow-sm p-3';
+        card.draggable=true;
+        card.innerHTML = `
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-sm font-medium">Gewicht #${kDisplay+1} <span class="text-xs text-slate-400">orig ${kOrig+1}</span></div>
+            <div class="text-xs text-slate-500">drag me</div>
+          </div>
+          <div class="aspect-square w-full overflow-hidden rounded-xl border border-slate-200">
+            <canvas class="w-full h-full block"></canvas>
+          </div>
+          <div class="mt-2 grid grid-cols-5 gap-1">
+            <button class="px-2 py-1 text-sm rounded-lg bg-slate-100 hover:bg-slate-200 rotl">⟲ 90°</button>
+            <button class="px-2 py-1 text-sm rounded-lg bg-slate-100 hover:bg-slate-200 rotr">⟳ 90°</button>
+            <button class="px-2 py-1 text-sm rounded-lg bg-slate-100 hover:bg-slate-200 trps">T</button>
+            <button class="px-2 py-1 text-sm rounded-lg bg-slate-100 hover:bg-slate-200 flph">↔︎</button>
+            <button class="px-2 py-1 text-sm rounded-lg bg-slate-100 hover:bg-slate-200 flpv">↕︎</button>
+          </div>
+        `;
+        drawHeatmap(card.querySelector('canvas'), mat, vmin, vmax);
+
+        const update = ()=>{ buildCards(); flatLayersCache=null; autoRender(); };
+        card.querySelector('.rotl').addEventListener('click', ()=>{ const o=opsState[activeModel].opsTriplet[kOrig]; o.rot90=(o.rot90+3)%4; update(); });
+        card.querySelector('.rotr').addEventListener('click', ()=>{ const o=opsState[activeModel].opsTriplet[kOrig]; o.rot90=(o.rot90+1)%4; update(); });
+        card.querySelector('.trps').addEventListener('click', ()=>{ const o=opsState[activeModel].opsTriplet[kOrig]; o.transpose=!o.transpose; update(); });
+        card.querySelector('.flph').addEventListener('click', ()=>{ const o=opsState[activeModel].opsTriplet[kOrig]; o.flip_h=!o.flip_h; update(); });
+        card.querySelector('.flpv').addEventListener('click', ()=>{ const o=opsState[activeModel].opsTriplet[kOrig]; o.flip_v=!o.flip_v; update(); });
+
+        card.addEventListener('dragstart', (e)=>{ card.classList.add('dragging'); e.dataTransfer.setData('text/plain', String(kDisplay)); });
+        card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
+        card.addEventListener('dragover', (e)=>{ e.preventDefault(); card.classList.add('ring-2','ring-indigo-300'); });
+        card.addEventListener('dragleave', ()=>card.classList.remove('ring-2','ring-indigo-300'));
+        card.addEventListener('drop', (e)=>{
+          e.preventDefault(); card.classList.remove('ring-2','ring-indigo-300');
+          const from=parseInt(e.dataTransfer.getData('text/plain'),10);
+          const to = kDisplay;
+          if(from!==to){
+            const ord=opsState[activeModel].order.slice();
+            [ord[from], ord[to]] = [ord[to], ord[from]];
+            opsState[activeModel].order=ord;
+            buildCards(); flatLayersCache=null; autoRender();
+          }
+        });
+
+        weightsGrid.appendChild(card);
+      });
+    }
+
+    function setCanvasSize(w,h){
+      outCanvas.width = w;
+      outCanvas.height= h;
+      sizeInfo.textContent = `Rendergröße: ${w}×${h}`;
+      imgData = outCanvas.getContext('2d').createImageData(w,h);
+    }
+    function sizeForModelIndex(i){
+      const m = models[i];
+      const w = (m.width  && m.width  >0) ? m.width  : 256;
+      const h = (m.height && m.height >0) ? m.height : 256;
+      return {w,h};
+    }
+
+    let renderTimer=null;
+    function autoRender(){ clearTimeout(renderTimer); renderTimer=setTimeout(renderActive, 30); }
+
+    async function renderActive(){
+      if(activeModel<0) return;
+      spinner.classList.remove('hidden'); renderBtn.disabled=true;
+      backendInfo.textContent = 'Backend: …';
+      try{
+        if(!flatLayersCache){
+          const mdl=models[activeModel];
+          const layers=buildWorkingLayers(mdl.layers, opsState[activeModel].opsTriplet, opsState[activeModel].order);
+          flatLayersCache = buildFlatLayers(layers);
+          const firstLin = flatLayersCache.find(l=>l.type==='linear');
+          const hid = firstLin ? firstLin.rows : 256;
+          cpuBufA = new Float32Array(Math.max(hid, 3));
+          cpuBufB = new Float32Array(Math.max(hid, 3));
+        }
+        const W = targetSize.w|0, H = targetSize.h|0;
+        if (W<=0 || H<=0) throw new Error('Ungültige Rendergröße');
+
+        try {
+          const [L0,L1,L2,L3,L4] = flatLayersCache.filter(l=>l.type==='linear');
+          const u8 = await WebGPU.render(W,H,L1.rows, L0,L1,L2,L3,L4);
+          const ctx = outCanvas.getContext('2d');
+          const img = new ImageData(u8, W, H);
+          ctx.putImageData(img, 0, 0);
+          backendInfo.textContent = 'Backend: WebGPU (Storage Texture)';
+          fmt(`Gerendert – Modell: ${models[activeModel].name}`);
+          return;
+        } catch(e) {
+          console.warn('WebGPU-Fallback:', e);
+        }
+
+        try {
+          glRenderOnce(outCanvas, W, H, flatLayersCache[1]?.rows||flatLayersCache[0].rows, flatLayersCache);
+          backendInfo.textContent = 'Backend: WebGL2';
+          fmt(`Gerendert – Modell: ${models[activeModel].name}`);
+          return;
+        } catch(e) {
+          console.warn('WebGL2-Fallback:', e);
+        }
+
+        const ctx=outCanvas.getContext('2d');
+        const data = imgData.data;
+        let k=0;
+        for(let yy=0; yy<H; yy++){
+          const yf = H>1 ? yy/(H-1) : 0;
+          for(let xx=0; xx<W; xx++){
+            const xf = W>1 ? xx/(W-1) : 0;
+            cpuBufA[0]=yf; cpuBufA[1]=xf;
+            const out = forwardOneFlat(flatLayersCache, cpuBufA, cpuBufB);
+            data[k++] = clamp(out[0],0,255)|0;
+            data[k++] = clamp(out[1],0,255)|0;
+            data[k++] = clamp(out[2],0,255)|0;
+            data[k++] = 255;
+          }
+        }
+        ctx.putImageData(imgData,0,0);
+        backendInfo.textContent = 'Backend: CPU';
+        fmt(`Gerendert – Modell: ${models[activeModel].name}`);
+      } finally {
+        spinner.classList.add('hidden'); renderBtn.disabled=false;
+      }
+    }
+
+    async function loadManifest(){
+      fmt('Lade Manifest …');
+      const res = await fetch(MANIFEST_URL, {cache:'no-store'});
+      if(!res.ok) throw new Error(`Manifest-Fehler (${res.status})`);
+      const j = await res.json();
+      if(!Array.isArray(j)) throw new Error('manifest.json muss ein Array sein.');
+      return j;
+    }
+    async function loadModelFromEntry(entry){
+      const modelURL = new URL(entry.url, MANIFEST_DIR);
+      const res = await fetch(modelURL, {cache:'no-store'});
+      if(!res.ok) throw new Error(`Modell-Fehler (${entry.name}): HTTP ${res.status}`);
+      const data = await res.json();
+      if(!Array.isArray(data.layers)) throw new Error(`${entry.name}: 'layers' fehlt/ist kein Array`);
+      const w = Number.isFinite(+entry.width)  ? (+entry.width|0)  : undefined;
+      const h = Number.isFinite(+entry.height) ? (+entry.height|0) : undefined;
+      models.push({ name: data.name || entry.name, layers: data.layers, width: w, height: h });
+      opsState.push({ opsTriplet:[
+        {rot90:0,transpose:false,flip_h:false,flip_v:false},
+        {rot90:0,transpose:false,flip_h:false,flip_v:false},
+        {rot90:0,transpose:false,flip_h:false,flip_v:false},
+      ], order:[0,1,2] });
+    }
+    async function refreshAll(){
+      models=[]; opsState=[]; activeModel=-1; flatLayersCache=null;
+      modelSelect.innerHTML=''; weightsGrid.innerHTML='';
+      const manifest = await loadManifest();
+      for(const entry of manifest){ await loadModelFromEntry(entry); }
+      populateModelSelect();
+      if(models.length>0){
+        activeModel=0; modelSelect.value='0';
+        targetSize = sizeForModelIndex(0);
+        setCanvasSize(targetSize.w, targetSize.h);
+        buildCards();
+        await renderActive();
+      }
+      fmt(`${models.length} Modell(e) geladen.`);
+    }
+
+    modelSelect.addEventListener('change', async ()=>{
+      activeModel=parseInt(modelSelect.value,10);
+      flatLayersCache=null;
+      targetSize = sizeForModelIndex(activeModel);
+      setCanvasSize(targetSize.w, targetSize.h);
+      buildCards();
+      await renderActive();
+    });
+
+    renderBtn.addEventListener('click', renderActive);
+    downloadBtn.addEventListener('click', ()=>{
+      if(activeModel<0) return;
+      const a=document.createElement('a');
+      a.href=outCanvas.toDataURL('image/png');
+      a.download=(models[activeModel]?.name||'render')+'.png';
+      a.click();
+    });
+    resetBtn.addEventListener('click', ()=>{
+      if(activeModel<0) return;
+      opsState[activeModel]={ opsTriplet:[
+        {rot90:0,transpose:false,flip_h:false,flip_v:false},
+        {rot90:0,transpose:false,flip_h:false,flip_v:false},
+        {rot90:0,transpose:false,flip_h:false,flip_v:false},
+      ], order:[0,1,2] };
+      buildCards(); flatLayersCache=null; autoRender();
+    });
+
+    // Hartes Cleanup gegen VRAM-Leaks bei Reload/Tab-Wechsel
+    window.addEventListener('pagehide', ()=> { WebGPU.dispose(); }, {capture:true});
+    window.addEventListener('beforeunload', ()=> { WebGPU.dispose(); });
+
+    refreshAll().catch(e=>fmt(String(e)));
+  </script>
+</body>
+</html>
