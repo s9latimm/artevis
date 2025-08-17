@@ -8,9 +8,7 @@
 
 ## Demo
 
-<img src="web/art_0001.png" height="256"/> <img src="web/art_0002.png" height="256"/> <img src="web/art_0003.png" height="256"/> 
-
-<video src="https://github.com/user-attachments/assets/73beaf10-07dc-4148-a6e8-293cc9279ddd" controls preload></video>
+<img src="web/art_0001.png" height="256"/> <img src="web/art_0002.png" height="256"/> <img src="web/art_0003.png" height="256"/>
 
 ## Setup
 
@@ -21,6 +19,7 @@
 ```shell
 $ python -m venv .venv
 $ .\.activate.ps1
+$ python -m src.srtevis
 ```
 
 
@@ -29,6 +28,7 @@ $ .\.activate.ps1
 ```shell
 $ python -m venv .venv
 $ source ./venv/bin/activate
+$ python -m src.srtevis
 ```
 
 ### Dependencies
