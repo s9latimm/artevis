@@ -1,3 +1,4 @@
+import argparse
 import copy
 import logging
 import sys
@@ -13,7 +14,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from src import OUTPUT_DIR, SEISMIC, SEISMIC_POSITIVE, SEISMIC_NEGATIVE, IMAGE_DIR
-from src.artevis import DPI, SIZE, PROJECTS, N, THRESHOLD, CUDA, DTYPE, CACHE, FPS
+from src.artevis import DPI, DEFAULT_SIZE, PROJECTS, DEFAULT_N, THRESHOLD, DTYPE, DEFAULT_FPS
 
 
 def save_fig(fig: plt.Figure, path: Path, dpi: float = DPI) -> None:
@@ -138,20 +139,20 @@ def artsy(weights: [torch.Tensor], biases: [torch.Tensor]):
     return weights, biases
 
 
-def image(project: str) -> np.ndarray:
+def image(project: str, size: int) -> np.ndarray:
     path = IMAGE_DIR / f'{project}.png'
     logging.info(f'Loading Image {path}')
 
     im = cv2.imread(str(path), cv2.IMREAD_COLOR)
     if im.shape[0] > im.shape[1]:
-        im = cv2.resize(im, (round(SIZE / im.shape[0] * im.shape[1]), SIZE))
+        im = cv2.resize(im, (round(size / im.shape[0] * im.shape[1]), size))
     else:
-        im = cv2.resize(im, (SIZE, round(SIZE / im.shape[1] * im.shape[0])))
+        im = cv2.resize(im, (size, round(size / im.shape[1] * im.shape[0])))
 
     return im
 
 
-def train(project: str, im: np.ndarray, n: int, threshold: float, model: torch.nn.Module,
+def train(project: str, im: np.ndarray, n: int, threshold: float, fps: float, model: torch.nn.Module,
           optimizer: torch.optim.Optimizer, device: torch.device, losses: [float]) -> None:
     save_image(im, OUTPUT_DIR / project / 'input.png')
 
@@ -197,7 +198,7 @@ def train(project: str, im: np.ndarray, n: int, threshold: float, model: torch.n
 
             fin = i > 2_000 and np.min(losses) < threshold and change < 1
 
-            if i % (600 / FPS) == 0 or fin:
+            if i % (600 // fps) == 0 or fin:
                 logging.info(f'Step {i} (Frame {frame}) -- Loss: {np.min(losses):.12f} ({progress:d}%, {change:.12f})')
 
                 art = copy.deepcopy(model)
@@ -268,54 +269,105 @@ def render(project: str, im: np.ndarray, model: torch.nn.Module, device: torch.d
     logging.info(f'Rendering -- End')
 
 
-def main() -> None:
-    assert torch.cuda.is_available()
+def main(options: argparse.Namespace) -> None:
+    device = torch.device(options.device)
+    layer = options.size
 
-    if CUDA:
-        device = torch.device('cuda')
-    else:
-        device = torch.device('cpu')
-    layer = SIZE
+    model = nn.Sequential()
+    model.append(nn.Linear(2, layer, bias=True, dtype=DTYPE))
+    model.append(nn.Tanh())
+    model.append(nn.Linear(layer, layer, bias=True, dtype=DTYPE))
+    model.append(nn.Tanh())
+    model.append(nn.Linear(layer, layer, bias=True, dtype=DTYPE))
+    model.append(nn.Tanh())
+    model.append(nn.Linear(layer, layer, bias=True, dtype=DTYPE))
+    model.append(nn.Tanh())
+    model.append(nn.Linear(layer, 3, bias=True, dtype=DTYPE))
+    logging.info(model)
 
-    for project in PROJECTS:
-        model = nn.Sequential()
-        model.append(nn.Linear(2, layer, bias=True, dtype=DTYPE))
-        model.append(nn.Tanh())
-        model.append(nn.Linear(layer, layer, bias=True, dtype=DTYPE))
-        model.append(nn.Tanh())
-        model.append(nn.Linear(layer, layer, bias=True, dtype=DTYPE))
-        model.append(nn.Tanh())
-        model.append(nn.Linear(layer, layer, bias=True, dtype=DTYPE))
-        model.append(nn.Tanh())
-        model.append(nn.Linear(layer, 3, bias=True, dtype=DTYPE))
-        logging.info(model)
+    n = options.steps
+    path = OUTPUT_DIR / options.project / 'tensor.pt'
+    path.parent.mkdir(parents=True, exist_ok=True)
 
-        n = N
-        path = OUTPUT_DIR / project / 'tensor.pt'
-        path.parent.mkdir(parents=True, exist_ok=True)
+    if options.cache and path.exists():
+        logging.info(f'Loading Model {path}')
+        model.load_state_dict(torch.load(path, weights_only=True))
+        n = 0
 
-        if CACHE and path.exists():
-            logging.info(f'Loading Model {path}')
-            model.load_state_dict(torch.load(path, weights_only=True))
-            n = 0
+    model.to(device)
 
-        model.to(device)
+    optimizer = torch.optim.Adam(model.parameters())
+    threshold = THRESHOLD
 
-        optimizer = torch.optim.Adam(model.parameters())
-        threshold = THRESHOLD
+    im = image(options.project, options.size)
 
-        im = image(project)
+    if n > 0:
+        model.train()
+        train(options.project, im, n, threshold, options.fps, model, optimizer, device, [])
 
-        if n > 0:
-            model.train()
-            train(project, im, n,  threshold, model, optimizer, device, [])
+    model.eval()
+    render(options.project, im, model, device)
 
-        model.eval()
-        render(project, im, model, device)
+    if options.cache:
+        logging.info(f'Saving Model {path}')
+        torch.save(model.state_dict(), path)
 
-        if CACHE:
-            logging.info(f'Saving Model {path}')
-            torch.save(model.state_dict(), path)
+
+def cmd() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog='artevis')
+
+    parser.add_argument(
+        '--cache',
+        action='store_true',
+        default=False,
+        help='Enable caching / storage of models in output folder',
+    )
+    parser.add_argument(
+        '--device',
+        type=str,
+        choices=['cpu', 'cuda'],
+        default='cpu',
+        help='device used for training (default: cpu)',
+    )
+    parser.add_argument(
+        '--steps',
+        type=int,
+        metavar='<steps>',
+        default=DEFAULT_N,
+        help=f'number of training steps (default: {DEFAULT_N:.0e})',
+    )
+    parser.add_argument(
+        '--fps',
+        type=float,
+        metavar='fps',
+        default=DEFAULT_FPS,
+        help=f'FPS (default: {DEFAULT_FPS:.0e})',
+    )
+    parser.add_argument(
+        '--size',
+        type=int,
+        metavar='<size>',
+        default=DEFAULT_SIZE,
+        help=f'size of trained image (default: {DEFAULT_SIZE})',
+    )
+    parser.add_argument(
+        '--project',
+        type=str,
+        metavar='<project>',
+        choices=PROJECTS,
+        default=PROJECTS[0],
+        help=f'choose project (default: {PROJECTS[0]})',
+    )
+
+    options = parser.parse_args()
+
+    assert options.steps > 0
+    assert options.size > 0
+    assert options.fps > 0
+    if options.device == 'cuda':
+        assert torch.cuda.is_available()
+
+    return options
 
 
 if __name__ == '__main__':
@@ -324,7 +376,7 @@ if __name__ == '__main__':
                         encoding='utf-8',
                         level=logging.INFO)
     try:
-        main()
+        main(cmd())
         logging.info('EXIT -- Success')
     except KeyboardInterrupt:
         logging.info('EXIT -- Abort')
