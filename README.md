@@ -8,9 +8,7 @@
 
 ## Demo
 
-<img src="web/art_0001.png" height="256"/> <img src="web/art_0002.png" height="256"/> <img src="web/art_0003.png" height="256"/> 
-
-<video src="https://github.com/user-attachments/assets/73beaf10-07dc-4148-a6e8-293cc9279ddd" controls preload></video>
+<img src="web/art_0001.png" height="256"/> <img src="web/art_0002.png" height="256"/> <img src="web/art_0003.png" height="256"/>
 
 ## Setup
 
@@ -22,7 +20,6 @@
 $ python -m venv .venv
 $ .\.activate.ps1
 ```
-
 
 #### Linux
 
@@ -40,3 +37,22 @@ $ python -m pip install torch --index-url https://download.pytorch.org/whl/cu126
 $ python -m pip install -r requirements.txt
 ```
 
+## Usage
+
+```shell
+$ python -m src.artevis
+```
+
+```text
+usage: artevis [-h] [--cache] [--device {cpu,cuda}] [--steps <steps>] [--fps fps] [--size <size>]
+               [--project <project>]
+
+options:
+  -h, --help           show this help message and exit
+  --cache              Enable caching / storage of models in output folder
+  --device {cpu,cuda}  device used for training (default: cpu)
+  --steps <steps>      number of training steps (default: 5e+04)
+  --fps fps            FPS (default: 6e+00)
+  --size <size>        size of trained image (default: 256)
+  --project <project>  choose project (default: mona)
+```
