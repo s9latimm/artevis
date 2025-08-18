@@ -42,9 +42,9 @@
 
             prefix(w = undefined) {
                 if (w !== undefined) {
-                    return `${this.flipped ? 1 : 0}-${this.inverted ? 1 : 0}-${w}`
+                    return `${this.inverted ? 1 : 0}-${this.flipped ? 1 : 0}-${w}`
                 } else {
-                    return `${this.flipped ? 1 : 0}-${this.inverted ? 1 : 0}-${this.w1}-${this.w2}-${this.w3}`
+                    return `${this.inverted ? 1 : 0}-${this.flipped ? 1 : 0}-${this.w1}-${this.w2}-${this.w3}`
                 }
             }
 

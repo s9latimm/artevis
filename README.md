@@ -6,11 +6,12 @@
 /_/  |_/_/   \__/\___/|___/_/____/  
 ```
 
-[![GitHub Pages](https://github.com/s9latimm/artevis/actions/workflows/github-pages.yml/badge.svg)]()
+[![GitHub Pages](https://github.com/s9latimm/artevis/actions/workflows/github-pages.yml/badge.svg)](https://s9latimm.github.io/artevis/)
 
 ## Demo
 
-<img src="web/art_0001.png" height="256"/> <img src="web/art_0002.png" height="256"/> <img src="web/art_0003.png" height="256"/>
+<img src="web/images/mona/0-1-1-2-3_art.png" height="256"/>
+<img src="web/images/fog/1-0-1-2-2_art.png" height="256"/>
 
 ## Setup
 
