@@ -26,6 +26,10 @@
                 "fog": {
                     "name": "Der Wanderer über dem Nebelmeer",
                     "prefix": "fog"
+                },
+                "pearl": {
+                    "name": "Meisje met de parel",
+                    "prefix": "pearl"
                 }
             }
         }
@@ -74,7 +78,7 @@
                         const img = document.createElement('img');
                         img.alt = name;
                         img.title = name;
-                        img.src = `images/${v['prefix']}/0-0-0-0-0_art.png`;
+                        img.src = `images/${v['prefix']}/0-0-0-0-0_art.jpg`;
                         preview.innerHTML = img.outerHTML
                         preview.addEventListener("click", () => {
                             window.state = new State(index['projects'][k])
@@ -105,7 +109,7 @@
 
                         switch (item) {
                             case 'w1': {
-                                img.src = `images/${state.project['prefix']}/${window.state.prefix(window.state.w1)}_${item}.png`;
+                                img.src = `images/${state.project['prefix']}/${window.state.prefix(window.state.w1)}_${item}.jpg`;
                                 {
                                     const button = document.createElement('div');
                                     button.className = 'button';
@@ -120,7 +124,7 @@
                                 break
                             }
                             case 'w2': {
-                                img.src = `images/${state.project['prefix']}/${window.state.prefix(window.state.w2)}_${item}.png`;
+                                img.src = `images/${state.project['prefix']}/${window.state.prefix(window.state.w2)}_${item}.jpg`;
                                 {
                                     const button = document.createElement('div');
                                     button.className = 'button';
@@ -136,7 +140,7 @@
                             }
                             case 'w3': {
                                 image.className = 'weight'
-                                img.src = `images/${state.project['prefix']}/${window.state.prefix(window.state.w3)}_${item}.png`;
+                                img.src = `images/${state.project['prefix']}/${window.state.prefix(window.state.w3)}_${item}.jpg`;
                                 {
                                     const button = document.createElement('div');
                                     button.className = 'button';
@@ -187,7 +191,7 @@
                 img.title = 'art';
                 image.appendChild(img);
 
-                img.src = `images/${state.project['prefix']}/${window.state.prefix()}_art.png`;
+                img.src = `images/${state.project['prefix']}/${window.state.prefix()}_art.jpg`;
 
                 const buttons = document.createElement('div');
                 buttons.className = 'buttons';

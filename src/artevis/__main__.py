@@ -24,7 +24,7 @@ def save_fig(fig: plt.Figure, path: Path, dpi: float = DPI) -> None:
 
 
 def save_weights(weights: np.ndarray, path: Path) -> None:
-    fig = plt.Figure(figsize=(weights.shape[1], weights.shape[0]), dpi=1)
+    fig = plt.Figure(figsize=(4 * weights.shape[1], 4 * weights.shape[0]), dpi=1)
 
     vmin, vmax = np.nanmin(weights), np.nanmax(weights)
     if vmin < 0 < vmax:
@@ -220,7 +220,6 @@ def train(project: str, im: np.ndarray, n: int, threshold: float, fps: float, mo
             fin = change < threshold and np.min(losses) < 100 * threshold
 
             if i % (600 // fps) == 0 or fin:
-                logging.info(fin)
                 logging.info(f'Step {i} (Frame {frame}) -- Loss: {np.min(losses):.12f} ({progress:d}%, {change:.12f})')
 
                 art = copy.deepcopy(model)
@@ -267,7 +266,7 @@ def render(project: str, im: np.ndarray, model: torch.nn.Module, device: torch.d
         elif 'bias' in name:
             biases.append(param.detach())
 
-    shape = im.shape[0], im.shape[1], 3
+    shape = 4 * im.shape[0], 4 * im.shape[1], 3
     grid = np.mgrid[0:shape[0], 0:shape[1]]
 
     x = torch.hstack([
@@ -333,15 +332,15 @@ def render(project: str, im: np.ndarray, model: torch.nn.Module, device: torch.d
 
                         prefix = f'{"1" if inverted else "0"}-{"1" if flipped else "0"}-{w1}'
                         save_weights(w[1].detach().cpu().numpy(),
-                                     OUTPUT_DIR / project / 'web' / project / f'{prefix}_w1.png')
+                                     OUTPUT_DIR / project / 'web' / project / f'{prefix}_w1.jpg')
 
                         prefix = f'{"1" if inverted else "0"}-{"1" if flipped else "0"}-{w2}'
                         save_weights(w[2].detach().cpu().numpy(),
-                                     OUTPUT_DIR / project / 'web' / project / f'{prefix}_w2.png')
+                                     OUTPUT_DIR / project / 'web' / project / f'{prefix}_w2.jpg')
 
                         prefix = f'{"1" if inverted else "0"}-{"1" if flipped else "0"}-{w3}'
                         save_weights(w[3].detach().cpu().numpy(),
-                                     OUTPUT_DIR / project / 'web' / project / f'{prefix}_w3.png')
+                                     OUTPUT_DIR / project / 'web' / project / f'{prefix}_w3.jpg')
 
                         for name, param in art.named_parameters():
                             if 'weight' in name:
@@ -357,7 +356,7 @@ def render(project: str, im: np.ndarray, model: torch.nn.Module, device: torch.d
 
                         save_art(
                             art.forward(x).detach().cpu().numpy().reshape(shape),
-                            OUTPUT_DIR / project / 'web' / project / f'{prefix}_art.png')
+                            OUTPUT_DIR / project / 'web' / project / f'{prefix}_art.jpg')
 
     art.to(device)
     art.eval()
