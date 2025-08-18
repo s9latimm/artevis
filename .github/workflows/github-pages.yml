@@ -46,10 +46,10 @@ jobs:
           name: build-master
           path: .
       - name: Upload Pages Artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v4
         with:
           retention-days: 1
           path: .
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v1
+        uses: actions/deploy-pages@v4

@@ -6,6 +6,8 @@
 /_/  |_/_/   \__/\___/|___/_/____/  
 ```
 
+[![GitHub Pages](https://github.com/s9latimm/artevis/actions/workflows/github-pages.yml/badge.svg)]()
+
 ## Demo
 
 <img src="web/art_0001.png" height="256"/> <img src="web/art_0002.png" height="256"/> <img src="web/art_0003.png" height="256"/>
