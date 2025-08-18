@@ -23,6 +23,31 @@ def save_fig(fig: plt.Figure, path: Path, dpi: float = DPI) -> None:
         fig.savefig(path, format=path.suffix[1:], transparent=False, dpi=dpi)
 
 
+def save_weights(weights: np.ndarray, path: Path) -> None:
+    fig = plt.Figure(figsize=(weights.shape[1], weights.shape[0]), dpi=1)
+
+    vmin, vmax = np.nanmin(weights), np.nanmax(weights)
+    if vmin < 0 < vmax:
+        norm = colors.TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+        cmap = SEISMIC
+    elif vmax == vmin:
+        norm = colors.Normalize(vmin=vmin, vmax=vmax)
+        cmap = SEISMIC
+    elif vmax < 0:
+        norm = colors.Normalize(vmin=vmin, vmax=0)
+        cmap = SEISMIC_NEGATIVE
+    else:
+        norm = colors.Normalize(vmin=0, vmax=vmax)
+        cmap = SEISMIC_POSITIVE
+
+    sub = fig.add_subplot()
+    sub.set_axis_off()
+    sub.imshow(weights, cmap=cmap, norm=norm, interpolation='nearest')
+    fig.subplots_adjust(bottom=0, top=1, left=0, right=1)
+    sub.margins(0, 0)
+    save_fig(fig, path, 1)
+
+
 def save_image(im: np.ndarray, path: Path) -> None:
     im = im.astype(np.int32)
     im[im > 255] = 255
@@ -52,10 +77,6 @@ def save_art(art: np.ndarray, path: Path) -> None:
     sub = fig.add_subplot()
     sub.set_axis_off()
     sub.imshow(im[:, :, ::-1], interpolation='nearest', zorder=1)
-
-    sub.set_xlim(0, im.shape[1])
-    sub.set_ylim(0, im.shape[0])
-
     fig.subplots_adjust(bottom=0, top=1, left=0, right=1)
     sub.margins(0, 0)
     save_fig(fig, path, 1)
@@ -119,23 +140,23 @@ def save_frame(fig: plt.Figure, n: int, model: torch.nn.Module, im: np.ndarray, 
 
 def artsy(weights: [torch.Tensor], biases: [torch.Tensor]):
     weights = [
-        weights[0],
-    ] + [
-        weights[3].rot90(),
-        weights[2].rot90().rot90(),
-        weights[1].rot90().rot90().rot90(),
-    ] + [
-        weights[4],
-    ]
+                  weights[0],
+              ] + [
+                  weights[3].rot90(),
+                  weights[2].rot90().rot90(),
+                  weights[1].rot90().rot90().rot90(),
+              ] + [
+                  weights[4],
+              ]
     biases = [
-        biases[0],
-    ] + [
-        biases[3],
-        biases[2],
-        biases[1],
-    ] + [
-        biases[4],
-    ]
+                 biases[0],
+             ] + [
+                 biases[3],
+                 biases[2],
+                 biases[1],
+             ] + [
+                 biases[4],
+             ]
     return weights, biases
 
 
@@ -190,15 +211,16 @@ def train(project: str, im: np.ndarray, n: int, threshold: float, fps: float, mo
         for i in range(n):
             loss: float | torch.Tensor = optimizer.step(closure)
             losses.append(loss.detach().cpu().numpy())
-            progress = int(100 * min(1, max(0, (1 - (np.min(losses) - threshold) / (np.max(losses) - threshold)))))
+            progress = int(
+                100 * min(1, max(0, (1 - (np.min(losses) - 100 * threshold) / (np.max(losses) - 100 * threshold)))))
             change = abs(np.min(losses[-2_000:-1_000]) - np.min(losses[-1_000:])) if i > 2_000 else np.inf
 
-            if pbar.n < progress:
-                pbar.update(progress - pbar.n)
+            pbar.update(progress - pbar.n)
 
-            fin = i > 2_000 and np.min(losses) < threshold and change < 1
+            fin = change < threshold and np.min(losses) < 100 * threshold
 
             if i % (600 // fps) == 0 or fin:
+                logging.info(fin)
                 logging.info(f'Step {i} (Frame {frame}) -- Loss: {np.min(losses):.12f} ({progress:d}%, {change:.12f})')
 
                 art = copy.deepcopy(model)
@@ -245,15 +267,100 @@ def render(project: str, im: np.ndarray, model: torch.nn.Module, device: torch.d
         elif 'bias' in name:
             biases.append(param.detach())
 
-    weights, biases = artsy(weights, biases)
+    shape = im.shape[0], im.shape[1], 3
+    grid = np.mgrid[0:shape[0], 0:shape[1]]
 
-    for name, param in art.named_parameters():
-        if 'weight' in name:
-            param.data = nn.parameter.Parameter(weights.pop(0))
-        elif 'bias' in name:
-            param.data = nn.parameter.Parameter(biases.pop(0))
+    x = torch.hstack([
+        torch.tensor(np.array([[i / (shape[0] - 1)] for i in grid[0].flatten()]), dtype=DTYPE, device=device),
+        torch.tensor(np.array([[i / (shape[1] - 1)] for i in grid[1].flatten()]), dtype=DTYPE, device=device),
+    ])
+
+    for inverted in [False, True]:
+        for flipped in [False, True]:
+            for w1 in [0, 1, 2, 3]:
+                for w2 in [0, 1, 2, 3]:
+                    for w3 in [0, 1, 2, 3]:
+                        if flipped:
+                            w = [
+                                    weights[0],
+                                ] + [
+                                    weights[3],
+                                    weights[2],
+                                    weights[1],
+                                ] + [
+                                    weights[4],
+                                ]
+                            b = [
+                                    biases[0],
+                                ] + [
+                                    biases[3],
+                                    biases[2],
+                                    biases[1],
+                                ] + [
+                                    biases[4],
+                                ]
+                        else:
+                            w = [
+                                    weights[0],
+                                ] + [
+                                    weights[1],
+                                    weights[2],
+                                    weights[3],
+                                ] + [
+                                    weights[4],
+                                ]
+                            b = [
+                                    biases[0],
+                                ] + [
+                                    biases[1],
+                                    biases[2],
+                                    biases[3],
+                                ] + [
+                                    biases[4],
+                                ]
+
+                        if inverted:
+                            w[1] = w[1].inverse()
+                            w[2] = w[2].inverse()
+                            w[3] = w[3].inverse()
+
+                        for _ in range(w1):
+                            w[1] = w[1].rot90()
+                        for _ in range(w2):
+                            w[2] = w[2].rot90()
+                        for _ in range(w3):
+                            w[3] = w[3].rot90()
+
+                        prefix = f'{"1" if inverted else "0"}-{"1" if flipped else "0"}-{w1}'
+                        save_weights(w[1].detach().cpu().numpy(),
+                                     OUTPUT_DIR / project / 'web' / project / f'{prefix}_w1.png')
+
+                        prefix = f'{"1" if inverted else "0"}-{"1" if flipped else "0"}-{w2}'
+                        save_weights(w[2].detach().cpu().numpy(),
+                                     OUTPUT_DIR / project / 'web' / project / f'{prefix}_w2.png')
+
+                        prefix = f'{"1" if inverted else "0"}-{"1" if flipped else "0"}-{w3}'
+                        save_weights(w[3].detach().cpu().numpy(),
+                                     OUTPUT_DIR / project / 'web' / project / f'{prefix}_w3.png')
+
+                        for name, param in art.named_parameters():
+                            if 'weight' in name:
+                                param.data = nn.parameter.Parameter(w.pop(0))
+                            elif 'bias' in name:
+                                param.data = nn.parameter.Parameter(b.pop(0))
+
+                        art.to(device)
+                        art.eval()
+
+                        prefix = f'{"1" if inverted else "0"}-{"1" if flipped else "0"}-{w1}-{w2}-{w3}'
+                        logging.info(prefix)
+
+                        save_art(
+                            art.forward(x).detach().cpu().numpy().reshape(shape),
+                            OUTPUT_DIR / project / 'web' / project / f'{prefix}_art.png')
 
     art.to(device)
+    art.eval()
 
     shape = 8 * im.shape[0], 8 * im.shape[1], 3
     grid = np.mgrid[0:shape[0], 0:shape[1]]
@@ -305,12 +412,12 @@ def main(options: argparse.Namespace) -> None:
         model.train()
         train(options.project, im, n, threshold, options.fps, model, optimizer, device, [])
 
-    model.eval()
-    render(options.project, im, model, device)
-
     if options.cache:
         logging.info(f'Saving Model {path}')
         torch.save(model.state_dict(), path)
+
+    model.eval()
+    render(options.project, im, model, device)
 
 
 def cmd() -> argparse.Namespace:

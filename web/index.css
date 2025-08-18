@@ -1,0 +1,85 @@
+* {
+    background-attachment: scroll !important;
+    font-family: monospace, monospace;
+    hyphens: auto;
+    color: black;
+    font-size: 14px;
+    text-align: left;
+}
+
+html, body {
+    height: 100%;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    background: black;
+}
+
+img {
+    display: block;
+    height: auto;
+    margin: auto;
+}
+
+.preview {
+    height: 5%;
+    width: 5%;
+    margin: 10px;
+}
+
+.preview img {
+    max-width: 64px;
+}
+
+.previews {
+    display: flex;
+    height: 5%;
+    width: 100%;
+    top: 0;
+    overflow: hidden;
+}
+
+.weight {
+    width: 20%;
+    margin: 10px;
+}
+
+.weight img {
+    max-width: 512px;
+}
+
+.art {
+    width: 40%;
+    height: auto;
+    margin: 10px;
+}
+
+.art img {
+    height: 512px;
+}
+
+.images {
+    display: flex;
+    height: 95%;
+    width: 100%;
+    top: 10%;
+    overflow: hidden;
+}
+
+.button {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 24px;
+    margin: 24px;
+    color: white;
+    font-size: 24px;
+}
+
+.buttons {
+    display: flex;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+}

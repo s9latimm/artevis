@@ -1,0 +1,12 @@
+{
+  "projects": {
+    "mona": {
+      "name": "Mona Lisa",
+      "prefix": "mona"
+    },
+    "fog": {
+      "name": "Der Wanderer über dem Nebelmeer",
+      "prefix": "fog"
+    }
+  }
+}
