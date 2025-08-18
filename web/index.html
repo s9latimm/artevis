@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>ArteVis</title>
+    <link rel="icon" type="image/x-icon" href="">
+    <link href="index.css" rel="stylesheet" type="text/css">
+    <script type="text/javascript">
+        const search = new URLSearchParams(window.location.search);
+        const domain = search.has('domain') ? search.get('domain') : '';
+
+        // function render() {
+        //     fetch(`${domain}/index.json`)
+        //         .then(response => response.json())
+        //         .then(index => init(index))
+        //         .catch(console.error);
+        // }
+
+        index = {
+            "projects": {
+                "mona": {
+                    "name": "Mona Lisa",
+                    "prefix": "mona"
+                },
+                "fog": {
+                    "name": "Der Wanderer über dem Nebelmeer",
+                    "prefix": "fog"
+                }
+            }
+        }
+
+        class State {
+            constructor(project) {
+                this.project = project;
+                this.inverted = false;
+                this.flipped = false;
+                this.w1 = 0;
+                this.w2 = 0;
+                this.w3 = 0;
+            }
+
+            prefix(w = undefined) {
+                if (w !== undefined) {
+                    return `${this.flipped ? 1 : 0}-${this.inverted ? 1 : 0}-${w}`
+                } else {
+                    return `${this.flipped ? 1 : 0}-${this.inverted ? 1 : 0}-${this.w1}-${this.w2}-${this.w3}`
+                }
+            }
+
+        }
+
+        function render() {
+            render_index(index)
+            const project = index['projects'][Object.keys(index['projects'])[0]]
+            window.state = new State(project)
+            render_canvas()
+        }
+    </script>
+</head>
+
+<body>
+<div id="content">
+    <div id="index">
+        <div class="previews" id="previews"></div>
+        <script type="text/javascript">
+
+
+            function render_index(index) {
+                Object.entries(index['projects']).forEach(([k, v]) => {
+                        const name = v['name']
+                        const preview = document.createElement('div');
+                        preview.className = 'preview'
+                        const img = document.createElement('img');
+                        img.alt = name;
+                        img.title = name;
+                        img.src = `images/${v['prefix']}/0-0-0-0-0_art.png`;
+                        preview.innerHTML = img.outerHTML
+                        preview.addEventListener("click", () => {
+                            window.state = new State(index['projects'][k])
+                            render_canvas()
+                        });
+                        document.getElementById('previews').appendChild(preview);
+                    }
+                )
+            }
+        </script>
+        <div class="images" id="images"></div>
+        <script type="text/javascript">
+            function render_canvas() {
+                console.log(window.state)
+
+                document.getElementById('images').innerHTML = '';
+                ['w1', 'w2', 'w3'].forEach(item => {
+                        const state = window.state
+                        const image = document.createElement('div');
+                        image.className = 'weight'
+                        const img = document.createElement('img');
+                        img.alt = item;
+                        img.title = item;
+                        image.appendChild(img);
+
+                        const buttons = document.createElement('div');
+                        buttons.className = 'buttons';
+
+                        switch (item) {
+                            case 'w1': {
+                                img.src = `images/${state.project['prefix']}/${window.state.prefix(window.state.w1)}_${item}.png`;
+                                {
+                                    const button = document.createElement('div');
+                                    button.className = 'button';
+                                    button.innerText = '⟳'
+
+                                    button.addEventListener("click", () => {
+                                        window.state.w1 = (window.state.w1 + 1) % 4
+                                        render_canvas()
+                                    });
+                                    buttons.appendChild(button);
+                                }
+                                break
+                            }
+                            case 'w2': {
+                                img.src = `images/${state.project['prefix']}/${window.state.prefix(window.state.w2)}_${item}.png`;
+                                {
+                                    const button = document.createElement('div');
+                                    button.className = 'button';
+                                    button.innerText = '⟳'
+
+                                    button.addEventListener("click", () => {
+                                        window.state.w2 = (window.state.w2 + 1) % 4
+                                        render_canvas()
+                                    });
+                                    buttons.appendChild(button);
+                                }
+                                break
+                            }
+                            case 'w3': {
+                                image.className = 'weight'
+                                img.src = `images/${state.project['prefix']}/${window.state.prefix(window.state.w3)}_${item}.png`;
+                                {
+                                    const button = document.createElement('div');
+                                    button.className = 'button';
+                                    button.innerText = '⟳'
+
+                                    button.addEventListener("click", () => {
+                                        window.state.w3 = (window.state.w3 + 1) % 4
+                                        render_canvas()
+                                    });
+                                    buttons.appendChild(button);
+                                }
+                                break
+                            }
+                        }
+
+                        {
+                            const button = document.createElement('div');
+                            button.className = 'button';
+                            button.innerText = '⇄'
+
+                            button.addEventListener("click", () => {
+                                window.state.flipped = !window.state.flipped
+                                render_canvas()
+                            });
+                            buttons.appendChild(button);
+                        }
+                        {
+                            const button = document.createElement('div');
+                            button.className = 'button';
+                            button.innerText = '1'
+
+                            button.addEventListener("click", () => {
+                                window.state.inverted = !window.state.inverted
+                                render_canvas()
+                            });
+                            buttons.appendChild(button);
+                        }
+                        image.appendChild(buttons);
+                        document.getElementById('images').appendChild(image);
+                    }
+                )
+
+                const state = window.state
+                const image = document.createElement('div');
+                image.className = 'art'
+                const img = document.createElement('img');
+                img.alt = 'art';
+                img.title = 'art';
+                image.appendChild(img);
+
+                img.src = `images/${state.project['prefix']}/${window.state.prefix()}_art.png`;
+
+                const buttons = document.createElement('div');
+                buttons.className = 'buttons';
+                document.getElementById('images').appendChild(image);
+            }
+        </script>
+    </div>
+</div>
+</body>
+
+<script type="text/javascript">
+    render();
+</script>
+
+</html>
