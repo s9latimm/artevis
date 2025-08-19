@@ -2,9 +2,9 @@
     background-attachment: scroll !important;
     font-family: monospace, monospace;
     hyphens: auto;
-    color: black;
+    color: white;
     font-size: 14px;
-    text-align: left;
+    text-align: center;
 
     -webkit-touch-callout: none;
     -webkit-user-select: none;
@@ -102,18 +102,22 @@ img {
 
 .rotate_0 {
     transform: rotate(0);
+    transform-origin: center center;
 }
 
 .rotate_1 {
     transform: rotate(0.25turn);
+    transform-origin: center center;
 }
 
 .rotate_2 {
     transform: rotate(0.5turn);
+    transform-origin: center center;
 }
 
 .rotate_3 {
     transform: rotate(0.75turn);
+    transform-origin: center center;
 }
 
 .active {

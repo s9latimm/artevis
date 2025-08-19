@@ -10,7 +10,7 @@
 
 ## Demo
 
-<img src="web/images/mona/0-1-1-2-3_art.png" height="256"/> <img src="web/images/fog/1-0-1-2-2_art.png" height="256"/>
+<img src="web/images/mona/0-1-1-2-3_art.jpg" height="256"/> <img src="web/images/fog/1-0-1-2-2_art.jpg" height="256"/>
 
 ## Setup
 
