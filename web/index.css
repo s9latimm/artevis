@@ -5,6 +5,13 @@
     color: black;
     font-size: 14px;
     text-align: left;
+
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
 }
 
 html, body {
@@ -16,7 +23,7 @@ html, body {
 }
 
 img {
-    display: block;
+    width: 100%;
     height: auto;
     margin: auto;
 }
@@ -29,6 +36,7 @@ img {
 
 .preview img {
     max-width: 64px;
+    cursor: pointer;
 }
 
 .previews {
@@ -40,25 +48,30 @@ img {
 }
 
 .weight {
-    width: 20%;
+    width: 33%;
     margin: 10px;
 }
 
-.weight img {
-    max-width: 512px;
+.weights {
+    display: flex;
+    width: 100%;
+    height: auto;
+    overflow: hidden;
+}
+
+.interaction {
+    width: 75%;
+    height: auto;
+    margin: 32px;
 }
 
 .art {
-    width: 40%;
+    width: 25%;
     height: auto;
     margin: 10px;
 }
 
-.art img {
-    height: 512px;
-}
-
-.images {
+.canvas {
     display: flex;
     height: 95%;
     width: 100%;
@@ -70,10 +83,12 @@ img {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 24px;
-    margin: 24px;
+    height: 32px;
+    width: 32px;
+    margin: 32px;
     color: white;
-    font-size: 24px;
+    font-size: 32px;
+    cursor: pointer;
 }
 
 .buttons {
@@ -82,4 +97,24 @@ img {
     height: 100%;
     width: 100%;
     overflow: hidden;
+}
+
+.rotate_0 {
+    transform: rotate(0);
+}
+
+.rotate_1 {
+    transform: rotate(0.25turn);
+}
+
+.rotate_2 {
+    transform: rotate(0.5turn);
+}
+
+.rotate_3 {
+    transform: rotate(0.75turn);
+}
+
+.active {
+    color: red !important;
 }
