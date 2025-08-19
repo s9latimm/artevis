@@ -69,6 +69,7 @@ img {
     width: 25%;
     height: auto;
     margin: 10px;
+    cursor: zoom-in;
 }
 
 .canvas {

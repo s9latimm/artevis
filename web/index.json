@@ -1,9 +1,5 @@
 {
   "projects": {
-    "mona": {
-      "name": "Mona Lisa",
-      "prefix": "mona"
-    },
     "fog": {
       "name": "Der Wanderer über dem Nebelmeer",
       "prefix": "fog"
@@ -15,6 +11,18 @@
     "scream": {
       "name": "Skrik",
       "prefix": "scream"
+    },
+    "garden": {
+      "name": "Garten am Thuner See",
+      "prefix": "garden"
+    },
+    "mona": {
+      "name": "Mona Lisa",
+      "prefix": "mona"
+    },
+    "horse": {
+      "name": "Blaues Pferd",
+      "prefix": "horse"
     },
     "stars": {
       "name": "De sterrennacht",

@@ -140,23 +140,23 @@ def save_frame(fig: plt.Figure, n: int, model: torch.nn.Module, im: np.ndarray, 
 
 def artsy(weights: [torch.Tensor], biases: [torch.Tensor]):
     weights = [
-                  weights[0],
-              ] + [
-                  weights[3].rot90(),
-                  weights[2].rot90().rot90(),
-                  weights[1].rot90().rot90().rot90(),
-              ] + [
-                  weights[4],
-              ]
+        weights[0],
+    ] + [
+        weights[3].rot90(),
+        weights[2].rot90().rot90(),
+        weights[1].rot90().rot90().rot90(),
+    ] + [
+        weights[4],
+    ]
     biases = [
-                 biases[0],
-             ] + [
-                 biases[3],
-                 biases[2],
-                 biases[1],
-             ] + [
-                 biases[4],
-             ]
+        biases[0],
+    ] + [
+        biases[3],
+        biases[2],
+        biases[1],
+    ] + [
+        biases[4],
+    ]
     return weights, biases
 
 
@@ -281,42 +281,42 @@ def render(project: str, im: np.ndarray, model: torch.nn.Module, device: torch.d
                     for w3 in [0, 1, 2, 3]:
                         if flipped:
                             w = [
-                                    weights[0],
-                                ] + [
-                                    weights[3],
-                                    weights[2],
-                                    weights[1],
-                                ] + [
-                                    weights[4],
-                                ]
+                                weights[0],
+                            ] + [
+                                weights[3],
+                                weights[2],
+                                weights[1],
+                            ] + [
+                                weights[4],
+                            ]
                             b = [
-                                    biases[0],
-                                ] + [
-                                    biases[3],
-                                    biases[2],
-                                    biases[1],
-                                ] + [
-                                    biases[4],
-                                ]
+                                biases[0],
+                            ] + [
+                                biases[3],
+                                biases[2],
+                                biases[1],
+                            ] + [
+                                biases[4],
+                            ]
                         else:
                             w = [
-                                    weights[0],
-                                ] + [
-                                    weights[1],
-                                    weights[2],
-                                    weights[3],
-                                ] + [
-                                    weights[4],
-                                ]
+                                weights[0],
+                            ] + [
+                                weights[1],
+                                weights[2],
+                                weights[3],
+                            ] + [
+                                weights[4],
+                            ]
                             b = [
-                                    biases[0],
-                                ] + [
-                                    biases[1],
-                                    biases[2],
-                                    biases[3],
-                                ] + [
-                                    biases[4],
-                                ]
+                                biases[0],
+                            ] + [
+                                biases[1],
+                                biases[2],
+                                biases[3],
+                            ] + [
+                                biases[4],
+                            ]
 
                         if inverted:
                             w[1] = w[1].inverse()
