@@ -78,11 +78,11 @@
       }
     })();
 
+    /* ====== Mat-ops / UI ====== */
     function rot90(m){ const h=m.length,w=m[0].length; const o=Array.from({length:w},()=>Array(h)); for(let y=0;y<h;y++)for(let x=0;x<w;x++)o[x][h-1-y]=m[y][x]; return o; }
     function transpose(m){ const h=m.length,w=m[0].length; const o=Array.from({length:w},()=>Array(h)); for(let y=0;y<h;y++)for(let x=0;x<w;x++)o[x][y]=m[y][x]; return o; }
     function flipH(m){ const h=m.length,w=m[0].length; const o=Array.from({length:h},()=>Array(w)); for(let y=0;y<h;y++)for(let x=0;x<w;x++)o[y][w-1-x]=m[y][x]; return o; }
     function flipV(m){ const h=m.length,w=m[0].length; const o=Array.from({length:h},()=>Array(w)); for(let y=0;y<h;y++)for(let x=0;x<w;x++)o[h-1-y][x]=m[y][x]; return o; }
-
     function applyOps(m,o){
       let out=m; const k=((o.rot90||0)%4+4)%4; for(let i=0;i<k;i++) out=rot90(out);
       if(o.transpose) out=transpose(out);
@@ -90,7 +90,6 @@
       if(o.flip_v) out=flipV(out);
       return out;
     }
-
     function getLinearIdx(layers){ const idx=[]; for(let i=0;i<layers.length;i++) if(layers[i]?.W&&layers[i]?.b) idx.push(i); return idx; }
     function getInternalTriplet(layers){
       const L=getLinearIdx(layers);
@@ -98,6 +97,7 @@
       return [L[1],L[2],L[3]];
     }
 
+    /* ====== Heatmap ====== */
     function colorSeismic(val, A){
       const t=(val+A)/(2*A), tt=clamp(t,0,1);
       if(tt<=.5){ const u=tt/.5; return [255*u|0, 255*u|0, 255, 255]; }
@@ -116,6 +116,7 @@
       return [mn,mx];
     }
 
+    /* ====== Model mutate for UI state ====== */
     function buildWorkingLayers(baseLayers, opsTriplet, orderTriplet){
       const layers = JSON.parse(JSON.stringify(baseLayers));
       const [a,b,c] = getInternalTriplet(layers);
@@ -128,6 +129,7 @@
       return layers;
     }
 
+    /* ====== CPU fallback math ====== */
     const TANH_MIN=-3.0, TANH_MAX=3.0, TANH_LUT_N=4096;
     const TANH_LUT=new Float32Array(TANH_LUT_N+1);
     for(let i=0;i<=TANH_LUT_N;i++){ const x=TANH_MIN + (i*(TANH_MAX-TANH_MIN)/TANH_LUT_N); TANH_LUT[i]=Math.tanh(x); }
@@ -155,7 +157,7 @@
       return v;
     }
 
-    /* -------------------- WebGL2 Fallback -------------------- */
+    /* ====== WebGL2 Fallback (mit BGR→RGB Map) ====== */
     const GL_MAX = 1024;
     const GL_FS = `#version 300 es
       precision highp float;
@@ -195,11 +197,12 @@
           for(int j=0;j<${GL_MAX};++j){ if(j>=uH) break; sum += texW(uW3,i,j,uH)*v3[j]; }
           v4[i] = ftanh(sum + texB(uB3,i));
         }
+        // BGR → RGB: W4 rows 2→R, 1→G, 0→B  (Bias analog)
         float r=0.0,g=0.0,b=0.0;
-        for(int j=0;j<${GL_MAX};++j){ if(j>=uH) break; r += texW(uW4,0,j,uH)*v4[j]; }
+        for(int j=0;j<${GL_MAX};++j){ if(j>=uH) break; r += texW(uW4,2,j,uH)*v4[j]; }
         for(int j=0;j<${GL_MAX};++j){ if(j>=uH) break; g += texW(uW4,1,j,uH)*v4[j]; }
-        for(int j=0;j<${GL_MAX};++j){ if(j>=uH) break; b += texW(uW4,2,j,uH)*v4[j]; }
-        r += texB(uB4,0); g += texB(uB4,1); b += texB(uB4,2);
+        for(int j=0;j<${GL_MAX};++j){ if(j>=uH) break; b += texW(uW4,0,j,uH)*v4[j]; }
+        r += texB(uB4,2); g += texB(uB4,1); b += texB(uB4,0);
         fragColor = vec4(clamp(r,0.0,255.0)/255.0, clamp(g,0.0,255.0)/255.0, clamp(b,0.0,255.0)/255.0, 1.0);
       }`;
 
@@ -273,7 +276,7 @@
       gl.deleteProgram(prog); gl.deleteShader(vs); gl.deleteShader(fs);
     }
 
-    /* -------------------- WebGPU persistent -------------------- */
+    /* ====== WebGPU (persistent, BGR→RGB) ====== */
     const WGSL = `
   struct Params { data : array<vec4<u32>, 16>, };
   @group(0) @binding(0) var<uniform> U : Params;
@@ -287,16 +290,13 @@
     return select(select(v.x, v.y, k==1u), select(v.z, v.w, k==3u), k>=2u);
   }
 
-  // Schnelle, stabile tanh-Approx (0.5% rel. Fehler im üblichen Bereich)
   fn ftanh(x:f32) -> f32 {
-    // clamp begrenzt Overflow/NANs auf GPUs mit krudem FastMath
     let xc = clamp(x, -5.0, 5.0);
     let x2 = xc * xc;
-    // Remez-ähnlich: x*(27 + x^2) / (27 + 9 x^2)
     return (xc * (27.0 + x2)) / (27.0 + 9.0 * x2);
   }
 
-  @compute @workgroup_size(8, 8, 1)   // konservativer als 16x16
+  @compute @workgroup_size(8, 8, 1)
   fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let W  : u32 = U32(0u);
     let Hh : u32 = U32(1u);
@@ -317,7 +317,6 @@
     let xf = select(0.0, f32(gid.x)/f32(max(1u, W-1u)),  W>1u);
     let yf = select(0.0, f32(gid.y)/f32(max(1u, Hh-1u)), Hh>1u);
 
-    // Lokale Register-Arrays (zero-init)
     var v1: array<f32, 1024>;
     for (var i:u32=0u; i<n; i++){
       let s = WAll[w0_off + i*2u + 0u]*yf
@@ -350,27 +349,27 @@
       v4[i] = ftanh(sum + BAll[b3_off + i]);
     }
 
-    var r:f32 = 0.0; var g:f32 = 0.0; var b:f32 = 0.0;
-    let rrow = w4_off + 0u*n;
+    // BGR (rows: 0=B,1=G,2=R) → RGB
+    let rrow = w4_off + 2u*n;
     let grow = w4_off + 1u*n;
-    let brow = w4_off + 2u*n;
+    let brow = w4_off + 0u*n;
+
+    var r:f32 = 0.0; var g:f32 = 0.0; var b:f32 = 0.0;
     for (var j:u32=0u; j<n; j++){
       r += WAll[rrow + j]*v4[j];
       g += WAll[grow + j]*v4[j];
       b += WAll[brow + j]*v4[j];
     }
 
-    // numerisch robust clampen
     let color = vec4<f32>(
-      clamp(r + BAll[b4_off + 0u], 0.0, 255.0) / 255.0,
-      clamp(g + BAll[b4_off + 1u], 0.0, 255.0) / 255.0,
-      clamp(b + BAll[b4_off + 2u], 0.0, 255.0) / 255.0,
+      clamp(r + BAll[b4_off + 2u], 0.0, 255.0) / 255.0,  // Bias[2] = R
+      clamp(g + BAll[b4_off + 1u], 0.0, 255.0) / 255.0,  // Bias[1] = G
+      clamp(b + BAll[b4_off + 0u], 0.0, 255.0) / 255.0,  // Bias[0] = B
       1.0
     );
     textureStore(outTex, vec2<i32>(gid.xy), color);
   }
 `;
-
 
     function concatFloat32(arrays){
       let total = 0; for(const a of arrays) total += a.length;
@@ -410,7 +409,6 @@
 
       ensureBuffers(W,H,wBytes,bBytes){
         const dev = this.device;
-        // pack buffers
         if(!this.bufWAll || this.alloc.wSize < wBytes){
           this.bufWAll?.destroy();
           this.bufWAll = dev.createBuffer({ size:Math.max(4, wBytes), usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST });
@@ -421,7 +419,6 @@
           this.bufBAll = dev.createBuffer({ size:Math.max(4, bBytes), usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST });
           this.alloc.bSize = Math.max(4, bBytes);
         }
-        // output texture + readback buffer (bytesPerRow 256-aligned)
         const bytesPerRow = ((W*4 + 255) & ~255);
         if(!this.outTex || this.alloc.W!==W || this.alloc.H!==H){
           this.outTex?.destroy();
@@ -454,68 +451,78 @@
         });
       },
 
-async render(W,H,hidden,L0,L1,L2,L3,L4){
-  await this.ensureDevice();
+      async render(W,H,hidden,L0,L1,L2,L3,L4){
+        await this.ensureDevice();
 
-  const w0_off=0, w1_off=w0_off+L0.W.length, w2_off=w1_off+L1.W.length, w3_off=w2_off+L2.W.length, w4_off=w3_off+L3.W.length;
-  const b0_off=0, b1_off=b0_off+L0.b.length, b2_off=b1_off+L1.b.length, b3_off=b2_off+L2.b.length, b4_off=b3_off+L3.b.length;
+        const w0_off=0, w1_off=w0_off+L0.W.length, w2_off=w1_off+L1.W.length, w3_off=w2_off+L2.W.length, w4_off=w3_off+L3.W.length;
+        const b0_off=0, b1_off=b0_off+L0.b.length, b2_off=b1_off+L1.b.length, b3_off=b2_off+L2.b.length, b4_off=b3_off+L3.b.length;
 
-  const WAll = concatFloat32([L0.W, L1.W, L2.W, L3.W, L4.W]);
-  const BAll = concatFloat32([L0.b, L1.b, L2.b, L3.b, L4.b]);
+        const WAll = concatFloat32([L0.W, L1.W, L2.W, L3.W, L4.W]);
+        const BAll = concatFloat32([L0.b, L1.b, L2.b, L3.b, L4.b]);
 
-  this.ensureBuffers(W,H,WAll.byteLength,BAll.byteLength);
+        this.ensureBuffers(W,H,WAll.byteLength,BAll.byteLength);
 
-  const U = new Uint32Array(64);
-  U[0]=W; U[1]=H; U[2]=hidden;
-  U[3]=w0_off; U[4]=w1_off; U[5]=w2_off; U[6]=w3_off; U[7]=w4_off;
-  U[8]=b0_off; U[9]=b1_off; U[10]=b2_off; U[11]=b3_off; U[12]=b4_off;
+        const U = new Uint32Array(64);
+        U[0]=W; U[1]=H; U[2]=hidden;
+        U[3]=w0_off; U[4]=w1_off; U[5]=w2_off; U[6]=w3_off; U[7]=w4_off;
+        U[8]=b0_off; U[9]=b1_off; U[10]=b2_off; U[11]=b3_off; U[12]=b4_off;
 
-  this.queue.writeBuffer(this.bufParams,0,U);
-  this.queue.writeBuffer(this.bufWAll,0,WAll);
-  this.queue.writeBuffer(this.bufBAll,0,BAll);
+        this.queue.writeBuffer(this.bufParams,0,U);
+        this.queue.writeBuffer(this.bufWAll,0,WAll);
+        this.queue.writeBuffer(this.bufBAll,0,BAll);
 
-  // Error-Scopes (sichtbar im DevTools-Log)
-  this.device.pushErrorScope('validation');
-  this.device.pushErrorScope('out-of-memory');
-  this.device.pushErrorScope('internal');
+        this.device.pushErrorScope('validation');
+        this.device.pushErrorScope('out-of-memory');
+        this.device.pushErrorScope('internal');
 
-  const enc = this.device.createCommandEncoder();
-  const pass = enc.beginComputePass();
-  pass.setPipeline(this.pipeline);
-  pass.setBindGroup(0, this.bindGroup());
-  pass.dispatchWorkgroups(Math.ceil(W/8), Math.ceil(H/8), 1);
-  pass.end();
+        const enc = this.device.createCommandEncoder();
+        const pass = enc.beginComputePass();
+        pass.setPipeline(this.pipeline);
+        pass.setBindGroup(0, this.bindGroup());
+        pass.dispatchWorkgroups(Math.ceil(W/8), Math.ceil(H/8), 1);
+        pass.end();
 
-  enc.copyTextureToBuffer(
-    { texture:this.outTex },
-    { buffer:this.outRead, bytesPerRow:this.alloc.bytesPerRow },
-    { width:W, height:H }
-  );
-  this.queue.submit([enc.finish()]);
-  await this.queue.onSubmittedWorkDone();
+        enc.copyTextureToBuffer(
+          { texture:this.outTex },
+          { buffer:this.outRead, bytesPerRow:this.alloc.bytesPerRow },
+          { width:W, height:H }
+        );
+        this.queue.submit([enc.finish()]);
+        await this.queue.onSubmittedWorkDone();
 
-  // Fehler abholen (falls vorhanden)
-  const errs = await Promise.all([
-    this.device.popErrorScope(), this.device.popErrorScope(), this.device.popErrorScope()
-  ]);
-  for (const e of errs) { if (e) { console.warn('WebGPU error:', e.message || e); } }
+        const errs = await Promise.all([
+          this.device.popErrorScope(), this.device.popErrorScope(), this.device.popErrorScope()
+        ]);
+        for (const e of errs) { if (e) { console.warn('WebGPU error:', e.message || e); } }
 
-  await this.outRead.mapAsync(GPUMapMode.READ);
-  const mapped = this.outRead.getMappedRange();
-  const rowStride = this.alloc.bytesPerRow;
-  const out = new Uint8ClampedArray(W*H*4);
-  let dst=0, src=0;
-  for(let y=0;y<H;y++){
-    out.set(new Uint8Array(mapped, src, W*4), dst);
-    src += rowStride; dst += W*4;
-  }
-  this.outRead.unmap();
-  return out;
-}
+        await this.outRead.mapAsync(GPUMapMode.READ);
+        const mapped = this.outRead.getMappedRange();
+        const rowStride = this.alloc.bytesPerRow;
+        const out = new Uint8ClampedArray(W*H*4);
+        let dst=0, src=0;
+        for(let y=0;y<H;y++){
+          out.set(new Uint8Array(mapped, src, W*4), dst);
+          src += rowStride; dst += W*4;
+        }
+        this.outRead.unmap();
+        return out;
+      },
 
+      dispose(){
+        try {
+          this.bufParams?.destroy(); this.bufParams=null;
+          this.bufWAll?.destroy();   this.bufWAll=null;
+          this.bufBAll?.destroy();   this.bufBAll=null;
+          this.outTex?.destroy();    this.outTex=null;
+          this.outRead?.destroy();   this.outRead=null;
+          // device selbst kann nicht hart zerstört werden; Referenzen lösen:
+          this.pipeline=null; this.bgl=null; this.module=null;
+          this.queue=null; /* device bleibt; GC kümmert sich */
+        } catch(e){ console.warn('dispose error', e); }
+      }
     };
 
-    /* -------------------- App State & UI -------------------- */
+    /* ====== App State & UI ====== */
     let models = [];
     let activeModel = -1;
     let opsState = [];
@@ -606,6 +613,7 @@ async render(W,H,hidden,L0,L1,L2,L3,L4){
     let renderTimer=null;
     function autoRender(){ clearTimeout(renderTimer); renderTimer=setTimeout(renderActive, 30); }
 
+    /* ====== Render orchestration ====== */
     async function renderActive(){
       if(activeModel<0) return;
       spinner.classList.remove('hidden'); renderBtn.disabled=true;
@@ -623,6 +631,7 @@ async render(W,H,hidden,L0,L1,L2,L3,L4){
         const W = targetSize.w|0, H = targetSize.h|0;
         if (W<=0 || H<=0) throw new Error('Ungültige Rendergröße');
 
+        // Try WebGPU
         try {
           const [L0,L1,L2,L3,L4] = flatLayersCache.filter(l=>l.type==='linear');
           const u8 = await WebGPU.render(W,H,L1.rows, L0,L1,L2,L3,L4);
@@ -636,6 +645,7 @@ async render(W,H,hidden,L0,L1,L2,L3,L4){
           console.warn('WebGPU-Fallback:', e);
         }
 
+        // Try WebGL2
         try {
           glRenderOnce(outCanvas, W, H, flatLayersCache[1]?.rows||flatLayersCache[0].rows, flatLayersCache);
           backendInfo.textContent = 'Backend: WebGL2';
@@ -645,6 +655,7 @@ async render(W,H,hidden,L0,L1,L2,L3,L4){
           console.warn('WebGL2-Fallback:', e);
         }
 
+        // CPU
         const ctx=outCanvas.getContext('2d');
         const data = imgData.data;
         let k=0;
@@ -654,10 +665,11 @@ async render(W,H,hidden,L0,L1,L2,L3,L4){
             const xf = W>1 ? xx/(W-1) : 0;
             cpuBufA[0]=yf; cpuBufA[1]=xf;
             const out = forwardOneFlat(flatLayersCache, cpuBufA, cpuBufB);
-            data[k++] = clamp(out[0],0,255)|0;
-            data[k++] = clamp(out[1],0,255)|0;
-            data[k++] = clamp(out[2],0,255)|0;
-            data[k++] = 255;
+            // BGR → RGB Mapping
+            data[k++] = clamp(out[2],0,255)|0; // R
+            data[k++] = clamp(out[1],0,255)|0; // G
+            data[k++] = clamp(out[0],0,255)|0; // B
+            data[k++] = 255;                   // A
           }
         }
         ctx.putImageData(imgData,0,0);
@@ -668,6 +680,7 @@ async render(W,H,hidden,L0,L1,L2,L3,L4){
       }
     }
 
+    /* ====== Loading ====== */
     async function loadManifest(){
       fmt('Lade Manifest …');
       const res = await fetch(MANIFEST_URL, {cache:'no-store'});
@@ -734,7 +747,7 @@ async render(W,H,hidden,L0,L1,L2,L3,L4){
       buildCards(); flatLayersCache=null; autoRender();
     });
 
-    // Hartes Cleanup gegen VRAM-Leaks bei Reload/Tab-Wechsel
+    // Cleanup gegen VRAM-Leaks bei Reload/Tab-Wechsel
     window.addEventListener('pagehide', ()=> { WebGPU.dispose(); }, {capture:true});
     window.addEventListener('beforeunload', ()=> { WebGPU.dispose(); });
 
