@@ -8,6 +8,8 @@
   <style>
     canvas { image-rendering: pixelated; }
     .dragging { opacity: .6; }
+    /* verhindert die Scroll-Anchoring-Warnung */
+    html, body { overflow-anchor: none; }
   </style>
 </head>
 <body class="min-h-screen bg-slate-50 text-slate-900">
@@ -132,9 +134,9 @@
     /* ====== CPU fallback math ====== */
     const TANH_MIN=-3.0, TANH_MAX=3.0, TANH_LUT_N=4096;
     const TANH_LUT=new Float32Array(TANH_LUT_N+1);
-    for(let i=0;i<=TANH_LUT_N;i++){ const x=TANH_MIN + (i*(TANH_MAX-TANH_MIN)/TANH_LUT_N); TANH_LUT[i]=Math.tanh(x); }
     function fastTanh(x){ if(x<=TANH_MIN) return TANH_LUT[0]; if(x>=TANH_MAX) return TANH_LUT[TANH_LUT_N];
       const t=(x-TANH_MIN)*TANH_LUT_N/(TANH_MAX-TANH_MIN), i=t|0, f=t-i; return TANH_LUT[i]+f*(TANH_LUT[i+1]-TANH_LUT[i]); }
+    for(let i=0;i<=TANH_LUT_N;i++){ const x=TANH_MIN + (i*(TANH_MAX-TANH_MIN)/TANH_LUT_N); TANH_LUT[i]=Math.tanh(x); }
     function flattenMatrix2D(M){ const rows=M.length, cols=M[0].length; const out=new Float32Array(rows*cols); let k=0;
       for(let r=0;r<rows;r++){ const mr=M[r]; for(let c=0;c<cols;c++) out[k++]=mr[c]; } return {data:out, rows, cols}; }
     function flattenVector1D(v){ const out=new Float32Array(v.length); for(let i=0;i<v.length;i++) out[i]=v[i]; return out; }
@@ -157,7 +159,7 @@
       return v;
     }
 
-    /* ====== WebGL2 Fallback (mit BGR→RGB Map) ====== */
+    /* ====== WebGL2 Fallback (BGR→RGB) ====== */
     const GL_MAX = 1024;
     const GL_FS = `#version 300 es
       precision highp float;
@@ -197,7 +199,7 @@
           for(int j=0;j<${GL_MAX};++j){ if(j>=uH) break; sum += texW(uW3,i,j,uH)*v3[j]; }
           v4[i] = ftanh(sum + texB(uB3,i));
         }
-        // BGR → RGB: W4 rows 2→R, 1→G, 0→B  (Bias analog)
+        // BGR -> RGB
         float r=0.0,g=0.0,b=0.0;
         for(int j=0;j<${GL_MAX};++j){ if(j>=uH) break; r += texW(uW4,2,j,uH)*v4[j]; }
         for(int j=0;j<${GL_MAX};++j){ if(j>=uH) break; g += texW(uW4,1,j,uH)*v4[j]; }
@@ -226,7 +228,7 @@
       gl.shaderSource(vs, `#version 300 es
         in vec2 aPos; void main(){ gl_Position = vec4(aPos,0.0,1.0); }`);
       gl.compileShader(vs);
-      if(!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(vs)||'VS error');
+      if(!gl.getShaderParameter(vs, gl.COMPILER_STATUS) && !gl.getShaderParameter(vs, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(vs)||'VS error');
 
       const fs = gl.createShader(gl.FRAGMENT_SHADER);
       gl.shaderSource(fs, GL_FS);
@@ -269,7 +271,6 @@
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-      // Cleanup (verhindert VRAM-Growth)
       gl.deleteTexture(texW0); gl.deleteTexture(texW1); gl.deleteTexture(texW2); gl.deleteTexture(texW3); gl.deleteTexture(texW4);
       gl.deleteTexture(texB0); gl.deleteTexture(texB1); gl.deleteTexture(texB2); gl.deleteTexture(texB3); gl.deleteTexture(texB4);
       gl.deleteBuffer(vbo); gl.deleteVertexArray(vao);
@@ -362,9 +363,9 @@
     }
 
     let color = vec4<f32>(
-      clamp(r + BAll[b4_off + 2u], 0.0, 255.0) / 255.0,  // Bias[2] = R
-      clamp(g + BAll[b4_off + 1u], 0.0, 255.0) / 255.0,  // Bias[1] = G
-      clamp(b + BAll[b4_off + 0u], 0.0, 255.0) / 255.0,  // Bias[0] = B
+      clamp(r + BAll[b4_off + 2u], 0.0, 255.0) / 255.0,
+      clamp(g + BAll[b4_off + 1u], 0.0, 255.0) / 255.0,
+      clamp(b + BAll[b4_off + 0u], 0.0, 255.0) / 255.0,
       1.0
     );
     textureStore(outTex, vec2<i32>(gid.xy), color);
@@ -382,7 +383,7 @@
       device:null, queue:null, module:null, bgl:null, pipeline:null,
       bufParams:null, bufWAll:null, bufBAll:null,
       outTex:null, outRead:null,
-      alloc:{W:0,H:0,wSize:0,bSize:0,bytesPerRow:0},
+      alloc:{W:0,H:0,wSize:0,bSize:0,bytesPerRow:0, readSize:0},
 
       async ensureDevice(){
         if(this.device) return;
@@ -409,6 +410,8 @@
 
       ensureBuffers(W,H,wBytes,bBytes){
         const dev = this.device;
+
+        // storage buffers
         if(!this.bufWAll || this.alloc.wSize < wBytes){
           this.bufWAll?.destroy();
           this.bufWAll = dev.createBuffer({ size:Math.max(4, wBytes), usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST });
@@ -419,8 +422,11 @@
           this.bufBAll = dev.createBuffer({ size:Math.max(4, bBytes), usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST });
           this.alloc.bSize = Math.max(4, bBytes);
         }
+
+        // output texture
         const bytesPerRow = ((W*4 + 255) & ~255);
-        if(!this.outTex || this.alloc.W!==W || this.alloc.H!==H){
+        const needNewTex = (!this.outTex || this.alloc.W!==W || this.alloc.H!==H);
+        if(needNewTex){
           this.outTex?.destroy();
           this.outTex = dev.createTexture({
             size:{width:W, height:H},
@@ -429,13 +435,22 @@
           });
           this.alloc.W=W; this.alloc.H=H;
         }
-        if(!this.outRead || this.alloc.bytesPerRow!==bytesPerRow){
+
+        // readback buffer — MUST grow when H changes OR bytesPerRow changes
+        const requiredReadSize = bytesPerRow * H;
+        const needNewRead =
+          (!this.outRead) ||
+          (this.alloc.bytesPerRow !== bytesPerRow) ||
+          (this.alloc.readSize   <  requiredReadSize);
+
+        if(needNewRead){
           this.outRead?.destroy();
           this.outRead = dev.createBuffer({
-            size: bytesPerRow*H,
+            size: requiredReadSize,
             usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
           });
           this.alloc.bytesPerRow = bytesPerRow;
+          this.alloc.readSize    = requiredReadSize;
         }
       },
 
@@ -515,9 +530,8 @@
           this.bufBAll?.destroy();   this.bufBAll=null;
           this.outTex?.destroy();    this.outTex=null;
           this.outRead?.destroy();   this.outRead=null;
-          // device selbst kann nicht hart zerstört werden; Referenzen lösen:
           this.pipeline=null; this.bgl=null; this.module=null;
-          this.queue=null; /* device bleibt; GC kümmert sich */
+          this.queue=null;
         } catch(e){ console.warn('dispose error', e); }
       }
     };
@@ -613,7 +627,6 @@
     let renderTimer=null;
     function autoRender(){ clearTimeout(renderTimer); renderTimer=setTimeout(renderActive, 30); }
 
-    /* ====== Render orchestration ====== */
     async function renderActive(){
       if(activeModel<0) return;
       spinner.classList.remove('hidden'); renderBtn.disabled=true;
@@ -631,7 +644,6 @@
         const W = targetSize.w|0, H = targetSize.h|0;
         if (W<=0 || H<=0) throw new Error('Ungültige Rendergröße');
 
-        // Try WebGPU
         try {
           const [L0,L1,L2,L3,L4] = flatLayersCache.filter(l=>l.type==='linear');
           const u8 = await WebGPU.render(W,H,L1.rows, L0,L1,L2,L3,L4);
@@ -645,7 +657,6 @@
           console.warn('WebGPU-Fallback:', e);
         }
 
-        // Try WebGL2
         try {
           glRenderOnce(outCanvas, W, H, flatLayersCache[1]?.rows||flatLayersCache[0].rows, flatLayersCache);
           backendInfo.textContent = 'Backend: WebGL2';
@@ -655,7 +666,6 @@
           console.warn('WebGL2-Fallback:', e);
         }
 
-        // CPU
         const ctx=outCanvas.getContext('2d');
         const data = imgData.data;
         let k=0;
@@ -665,11 +675,11 @@
             const xf = W>1 ? xx/(W-1) : 0;
             cpuBufA[0]=yf; cpuBufA[1]=xf;
             const out = forwardOneFlat(flatLayersCache, cpuBufA, cpuBufB);
-            // BGR → RGB Mapping
-            data[k++] = clamp(out[2],0,255)|0; // R
-            data[k++] = clamp(out[1],0,255)|0; // G
-            data[k++] = clamp(out[0],0,255)|0; // B
-            data[k++] = 255;                   // A
+            // BGR → RGB
+            data[k++] = clamp(out[2],0,255)|0;
+            data[k++] = clamp(out[1],0,255)|0;
+            data[k++] = clamp(out[0],0,255)|0;
+            data[k++] = 255;
           }
         }
         ctx.putImageData(imgData,0,0);
