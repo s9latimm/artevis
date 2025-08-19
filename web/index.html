@@ -8,51 +8,11 @@
     <link href="index.css" rel="stylesheet" type="text/css">
     <script type="text/javascript">
         const search = new URLSearchParams(window.location.search);
-        const domain = search.has('domain') ? search.get('domain') : '';
-
-        // function render() {
-        //     fetch(`${domain}/index.json`)
-        //         .then(response => response.json())
-        //         .then(index => init(index))
-        //         .catch(console.error);
-        // }
-
-        index = {
-            "projects": {
-                "fog": {
-                    "name": "Der Wanderer über dem Nebelmeer",
-                    "prefix": "fog"
-                },
-                "pearl": {
-                    "name": "Meisje met de parel",
-                    "prefix": "pearl"
-                },
-                "scream": {
-                    "name": "Skrik",
-                    "prefix": "scream"
-                },
-                "garden": {
-                    "name": "Garten am Thuner See",
-                    "prefix": "garden"
-                },
-                "mona": {
-                    "name": "Mona Lisa",
-                    "prefix": "mona"
-                },
-                "horse": {
-                    "name": "Blaues Pferd",
-                    "prefix": "horse"
-                },
-                "stars": {
-                    "name": "De sterrennacht",
-                    "prefix": "stars"
-                }
-            }
-        }
+        const domain = search.has('domain') ? search.get('domain') : 'https://s9latimm.github.io/artevis';
 
         class Random {
             constructor(seed) {
-                this.seed = seed
+                this.seed = seed;
             }
 
             random(min, max) {
@@ -72,18 +32,22 @@
             }
 
             prefix() {
-                return `${this.inverted ? 1 : 0}-${this.reverted ? 1 : 0}-${this.w1}-${this.w2}-${this.w3}`
+                return `${this.inverted ? 1 : 0}-${this.reverted ? 1 : 0}-${this.w1}-${this.w2}-${this.w3}`;
             }
 
         }
 
         function init() {
-            render_index(index)
-            const project = index.projects[Object.keys(index.projects)[0]]
-            window.random = new Random(42)
-            window.state = new State(project)
-            init_canvas()
-            render_canvas()
+            fetch(`${domain}/index.json`)
+                .then(response => response.json())
+                .then(index => {
+                    render_index(index);
+                    const project = index.projects[Object.keys(index.projects)[0]];
+                    window.random = new Random(42);
+                    window.state = new State(project);
+                    init_canvas();
+                    render_canvas();
+                }).catch(console.error);
         }
     </script>
 </head>
@@ -98,21 +62,21 @@
 
             function render_index(index) {
                 Object.entries(index.projects).forEach(([k, v]) => {
-                        const name = v.name
+                        const name = v.name;
                         const preview = document.createElement('div');
-                        preview.className = 'preview'
+                        preview.className = 'preview';
                         const img = document.createElement('img');
                         img.alt = name;
                         img.title = name;
                         img.src = `images/${v.prefix}/0-0-0-0-0_art.jpg`;
-                        preview.innerHTML = img.outerHTML
+                        preview.innerHTML = img.outerHTML;
                         preview.addEventListener("click", () => {
-                            window.state = new State(index.projects[k])
-                            render_canvas()
+                            window.state = new State(index.projects[k]);
+                            render_canvas();
                         });
                         document.getElementById('previews').appendChild(preview);
                     }
-                )
+                );
             }
         </script>
         <div class="canvas" id="canvas">
@@ -165,41 +129,40 @@
         </div>
         <script type="text/javascript">
             function init_canvas() {
-                console.log(window.state)
+                console.log(window.state);
 
                 {
                     const button = document.getElementById('reset')
                     button.addEventListener("click", () => {
-                        window.state = new State(window.state.project)
-                        render_canvas()
+                        window.state = new State(window.state.project);
+                        render_canvas();
                     });
                 }
 
                 {
                     const button = document.getElementById('randomize')
                     button.addEventListener("click", () => {
-                        window.state.w1 = window.random.random(1, 3)
-                        window.state.w2 = window.random.random(1, 3)
-                        window.state.w3 = window.random.random(1, 3)
-                        window.state.inverted = window.random.random(0, 1)
-                        window.state.reverted = window.random.random(0, 1)
-                        render_canvas()
+                        window.state.w1 = window.random.random(0, 3);
+                        window.state.w2 = window.random.random(0, 3);
+                        window.state.w3 = window.random.random(0, 3);
+                        render_canvas();
                     });
                 }
 
                 {
                     const button = document.getElementById('revert')
                     button.addEventListener("click", () => {
-                        window.state.reverted = !window.state.reverted
-                        render_canvas()
+                        window.state.reverted = !window.state.reverted;
+                        [window.state.w1, window.state.w3] = [window.state.w3, window.state.w1];
+                        render_canvas();
                     });
                 }
 
                 {
                     const button = document.getElementById('invert')
                     button.addEventListener("click", () => {
-                        window.state.inverted = !window.state.inverted
-                        render_canvas()
+                        window.state.inverted = !window.state.inverted;
+                        render_canvas();
                     });
                 }
 
@@ -209,75 +172,75 @@
                 console.log(window.state)
 
                 {
-                    const button = document.getElementById('invert')
-                    button.className = window.state.inverted > 0 ? 'button active' : 'button'
+                    const button = document.getElementById('invert');
+                    button.className = window.state.inverted > 0 ? 'button active' : 'button';
                 }
 
                 {
-                    const button = document.getElementById('revert')
-                    button.className = window.state.reverted > 0 ? 'button active' : 'button'
+                    const button = document.getElementById('revert');
+                    button.className = window.state.reverted > 0 ? 'button active' : 'button';
                 }
 
                 {
-                    const img = document.getElementById('w1_img')
+                    const img = document.getElementById('w1_img');
                     img.src = `images/${window.state.project.prefix}/${window.state.inverted ? 1 : 0}-0-0_${window.state.reverted ? 'w3' : 'w1'}.jpg`;
-                    img.className = `rotate_${window.state.w1}`
+                    img.className = `rotate_${window.state.w1}`;
                 }
                 {
-                    const button = document.getElementById('w1_rot')
+                    const button = document.getElementById('w1_rot');
                     button.replaceWith(button.cloneNode(true));
                 }
                 {
-                    const button = document.getElementById('w1_rot')
+                    const button = document.getElementById('w1_rot');
                     button.addEventListener("click", () => {
-                        window.state.w1 = (window.state.w1 + 1) % 4
-                        render_canvas()
+                        window.state.w1 = (window.state.w1 + 1) % 4;
+                        render_canvas();
                     });
-                    button.className = window.state.w1 > 0 ? 'button active' : 'button'
+                    button.className = window.state.w1 > 0 ? 'button active' : 'button';
                 }
 
                 {
-                    const img = document.getElementById('w2_img')
+                    const img = document.getElementById('w2_img');
                     img.src = `images/${window.state.project.prefix}/${window.state.inverted ? 1 : 0}-0-0_w2.jpg`;
-                    img.className = `rotate_${window.state.w2}`
+                    img.className = `rotate_${window.state.w2}`;
                 }
                 {
-                    const button = document.getElementById('w2_rot')
+                    const button = document.getElementById('w2_rot');
                     button.replaceWith(button.cloneNode(true));
                 }
                 {
-                    const button = document.getElementById('w2_rot')
+                    const button = document.getElementById('w2_rot');
                     button.addEventListener("click", () => {
-                        window.state.w2 = (window.state.w2 + 1) % 4
-                        render_canvas()
+                        window.state.w2 = (window.state.w2 + 1) % 4;
+                        render_canvas();
                     });
-                    button.className = window.state.w2 > 0 ? 'button active' : 'button'
+                    button.className = window.state.w2 > 0 ? 'button active' : 'button';
                 }
 
                 {
-                    const img = document.getElementById('w3_img')
+                    const img = document.getElementById('w3_img');
                     img.src = `images/${window.state.project.prefix}/${window.state.inverted ? 1 : 0}-0-0_${window.state.reverted ? 'w1' : 'w3'}.jpg`;
-                    img.className = `rotate_${window.state.w3}`
+                    img.className = `rotate_${window.state.w3}`;
                 }
                 {
-                    const button = document.getElementById('w3_rot')
+                    const button = document.getElementById('w3_rot');
                     button.replaceWith(button.cloneNode(true));
                 }
                 {
-                    const button = document.getElementById('w3_rot')
+                    const button = document.getElementById('w3_rot');
                     button.addEventListener("click", () => {
-                        window.state.w3 = (window.state.w3 + 1) % 4
-                        render_canvas()
+                        window.state.w3 = (window.state.w3 + 1) % 4;
+                        render_canvas();
                     });
-                    button.className = window.state.w3 > 0 ? 'button active' : 'button'
+                    button.className = window.state.w3 > 0 ? 'button active' : 'button';
                 }
 
                 {
-                    const img = document.getElementById('art_img')
+                    const img = document.getElementById('art_img');
                     img.replaceWith(img.cloneNode(true));
                 }
                 {
-                    const img = document.getElementById('art_img')
+                    const img = document.getElementById('art_img');
                     img.src = `images/${state.project.prefix}/${window.state.prefix()}_art.jpg`;
                     img.addEventListener("click", () => {
                         window.open(img.src, '_blank').focus();
