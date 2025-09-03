@@ -33,12 +33,7 @@ jobs:
           if-no-files-found: error
           overwrite: true
           path: |
-            ${{ matrix.path }}/web/images/
-            ${{ matrix.path }}/web/demo.mp4
-            ${{ matrix.path }}/web/index.css
-            ${{ matrix.path }}/web/index.html
-            ${{ matrix.path }}/web/index.json
-            ${{ matrix.path }}/web/description.json
+            ${{ matrix.path }}/web/
 
   deploy:
     needs: build
