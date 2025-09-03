@@ -59,4 +59,4 @@ options:
 
 ## Development
 
-[![GitHub Pages (develop)](https://github.com/s9latimm/artevis/actions/workflows/github-pages.yml/badge.svg?branch=develop)](https://s9latimm.github.io/artevis/develop)
+[![GitHub Pages (develop)](https://github.com/s9latimm/artevis/actions/workflows/github-pages.yml/badge.svg?branch=develop)](https://s9latimm.github.io/artevis/develop/?domain=https://s9latimm.github.io/artevis/develop)
