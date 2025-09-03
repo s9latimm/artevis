@@ -6,9 +6,7 @@
 /_/  |_/_/   \__/\___/|___/_/____/  
 ```
 
-[![GitHub Pages](https://github.com/s9latimm/artevis/actions/workflows/github-pages.yml/badge.svg)](https://s9latimm.github.io/artevis/)
-
-## Demo
+[![GitHub Pages (master)](https://github.com/s9latimm/artevis/actions/workflows/github-pages.yml/badge.svg?branch=master)](https://s9latimm.github.io/artevis/)
 
 <img src="web/images/mona/0-1-1-2-3_art.jpg" height="256"/> <img src="web/images/fog/1-0-1-2-2_art.jpg" height="256"/>
 
@@ -58,3 +56,7 @@ options:
   --size <size>        size of trained image (default: 256)
   --project <project>  choose project (default: mona)
 ```
+
+## Development
+
+[![GitHub Pages (develop)](https://github.com/s9latimm/artevis/actions/workflows/github-pages.yml/badge.svg?branch=develop)](https://s9latimm.github.io/artevis/develop)
