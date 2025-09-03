@@ -199,5 +199,6 @@ hr {
 }
 
 .gallery a {
-    margin:  16px 16px 16px 16px
+    margin:  16px 16px 16px 16px;
+    cursor: zoom-in;
 }
