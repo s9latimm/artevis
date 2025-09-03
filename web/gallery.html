@@ -12,7 +12,7 @@
         const develop = search.has("develop") ? search.get("develop").toLowerCase() === "true" : false;
 
         function init() {
-            render_tabs(search.has("domain") ? domain : undefined, develop);
+            render_tabs(search.has("domain") ? domain : undefined, domain, develop);
             fetch(`${domain}/gallery.json`)
                 .then(response => response.json())
                 .then(gallery => {
