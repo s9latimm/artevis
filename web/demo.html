@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>ArteVis</title>
+    <link rel="icon" type="image/x-icon" href="">
+    <link href="style.css" rel="stylesheet" type="text/css">
+    <script type="text/javascript">
+        const search = new URLSearchParams(window.location.search);
+        const domain = search.has('domain') ? search.get('domain') : 'https://s9latimm.github.io/artevis';
+        const develop = search.has('develop') ? search.get('develop').toLowerCase() === 'true' : false;
+
+        class Random {
+            constructor(seed) {
+                this.seed = seed;
+            }
+
+            random(min, max) {
+                const x = Math.sin(this.seed++) * 100_000;
+                return Math.floor((x - Math.floor(x)) * (max - min + 1)) + min;
+            }
+        }
+
+        class State {
+            constructor(project) {
+                this.project = project;
+                this.inverted = false;
+                this.reverted = false;
+                this.w1 = 0;
+                this.w2 = 0;
+                this.w3 = 0;
+            }
+
+            prefix() {
+                return `${this.inverted ? 1 : 0}-${this.reverted ? 1 : 0}-${this.w1}-${this.w2}-${this.w3}`;
+            }
+
+        }
+
+        function init() {
+            render_tabs(search.has('domain') ? domain : undefined, domain, develop);
+            fetch(`${domain}/projects.json`)
+                .then(response => response.json())
+                .then(projects => {
+                    render_index(projects);
+                    const project = projects[Object.keys(projects)[0]];
+                    window.random = new Random(42);
+                    window.state = new State(project);
+                    init_canvas();
+                    render_canvas();
+                }).catch(console.error);
+        }
+    </script>
+</head>
+
+<body>
+<div id="content">
+    <div id="index">
+        <div class="tabs" id="tabs">
+            <a class="button tab disabled" id="home">home</a>
+            <a class="button tab enabled" id="demo">demo</a>
+        </div>
+
+        <script type="text/javascript">
+            function render_tabs(domain, home, develop) {
+                const button = document.getElementById("home");
+                const href = develop ? "index.html" : home;
+
+                const search = []
+                if (domain) {
+                    search.push(`domain=${domain}`)
+                }
+                if (develop) {
+                    search.push("develop=true")
+                }
+
+                if (search.length > 0) {
+                    button.href = href + "?" + search.join("&")
+                } else {
+                    button.href = href
+                }
+            }
+        </script>
+
+        <hr>
+
+        <div class="previews" id="previews"></div>
+        <script type="text/javascript">
+
+
+            function render_index(projects) {
+                Object.entries(projects).forEach(([k, v]) => {
+                        const name = v.name;
+                        const preview = document.createElement('div');
+                        preview.className = 'preview';
+                        const img = document.createElement('img');
+                        img.alt = name;
+                        img.title = name;
+                        img.src = `images/${v.prefix}/0-0-0-0-0_art.jpg`;
+                        preview.innerHTML = img.outerHTML;
+                        preview.addEventListener("click", () => {
+                            window.state = new State(projects[k]);
+                            render_canvas();
+                        });
+                        document.getElementById('previews').appendChild(preview);
+                    }
+                );
+            }
+        </script>
+        <div class="canvas" id="canvas">
+            <div class="interaction">
+                <div class="weights">
+                    <div class="weight" id="w1">
+                        <img src="" alt="w1" id="w1_img" title="w1">
+                        <div class="buttons">
+                            <div class="button" id="w1_rot" title="rotate">
+                                ⟳
+                            </div>
+                        </div>
+                    </div>
+                    <div class="weight" id="w2">
+                        <img src="" alt="w2" id="w2_img" title="w2">
+                        <div class="buttons">
+                            <div class="button" id="w2_rot" title="rotate">
+                                ⟳
+                            </div>
+                        </div>
+                    </div>
+                    <div class="weight" id="w3">
+                        <img src="" alt="w3" id="w3_img" title="w3">
+                        <div class="buttons">
+                            <div class="button" id="w3_rot" title="rotate">
+                                ⟳
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <hr>
+                <div class="buttons">
+                    <div class="button" id="reset" title="reset">
+                        0
+                    </div>
+                    <div class="button" id="randomize" title="randomize">
+                        r
+                    </div>
+                    <div class="button" id="revert" title="revert">
+                        ⇄
+                    </div>
+                    <div class="button" id="invert" title="invert">
+                        1
+                    </div>
+                </div>
+            </div>
+            <div class="art" id="art">
+                <img src="" alt="" id="art_img" title="art">
+            </div>
+        </div>
+        <script type="text/javascript">
+            function init_canvas() {
+                console.log(window.state);
+
+                {
+                    const button = document.getElementById('reset')
+                    button.addEventListener("click", () => {
+                        window.state = new State(window.state.project);
+                        render_canvas();
+                    });
+                }
+
+                {
+                    const button = document.getElementById('randomize')
+                    button.addEventListener("click", () => {
+                        window.state.w1 = window.random.random(0, 3);
+                        window.state.w2 = window.random.random(0, 3);
+                        window.state.w3 = window.random.random(0, 3);
+                        render_canvas();
+                    });
+                }
+
+                {
+                    const button = document.getElementById('revert')
+                    button.addEventListener("click", () => {
+                        window.state.reverted = !window.state.reverted;
+                        [window.state.w1, window.state.w3] = [window.state.w3, window.state.w1];
+                        render_canvas();
+                    });
+                }
+
+                {
+                    const button = document.getElementById('invert')
+                    button.addEventListener("click", () => {
+                        window.state.inverted = !window.state.inverted;
+                        render_canvas();
+                    });
+                }
+
+            }
+
+            function render_canvas() {
+                console.log(window.state)
+
+                {
+                    const button = document.getElementById('invert');
+                    button.className = window.state.inverted > 0 ? 'button active' : 'button';
+                }
+
+                {
+                    const button = document.getElementById('revert');
+                    button.className = window.state.reverted > 0 ? 'button active' : 'button';
+                }
+
+                {
+                    const img = document.getElementById('w1_img');
+                    img.src = `images/${window.state.project.prefix}/${window.state.inverted ? 1 : 0}-0-0_${window.state.reverted ? 'w3' : 'w1'}.jpg`;
+                    img.className = `rotate_${window.state.w1}`;
+                }
+                {
+                    const button = document.getElementById('w1_rot');
+                    button.replaceWith(button.cloneNode(true));
+                }
+                {
+                    const button = document.getElementById('w1_rot');
+                    button.addEventListener("click", () => {
+                        window.state.w1 = (window.state.w1 + 1) % 4;
+                        render_canvas();
+                    });
+                    button.className = window.state.w1 > 0 ? 'button active' : 'button';
+                }
+
+                {
+                    const img = document.getElementById('w2_img');
+                    img.src = `images/${window.state.project.prefix}/${window.state.inverted ? 1 : 0}-0-0_w2.jpg`;
+                    img.className = `rotate_${window.state.w2}`;
+                }
+                {
+                    const button = document.getElementById('w2_rot');
+                    button.replaceWith(button.cloneNode(true));
+                }
+                {
+                    const button = document.getElementById('w2_rot');
+                    button.addEventListener("click", () => {
+                        window.state.w2 = (window.state.w2 + 1) % 4;
+                        render_canvas();
+                    });
+                    button.className = window.state.w2 > 0 ? 'button active' : 'button';
+                }
+
+                {
+                    const img = document.getElementById('w3_img');
+                    img.src = `images/${window.state.project.prefix}/${window.state.inverted ? 1 : 0}-0-0_${window.state.reverted ? 'w1' : 'w3'}.jpg`;
+                    img.className = `rotate_${window.state.w3}`;
+                }
+                {
+                    const button = document.getElementById('w3_rot');
+                    button.replaceWith(button.cloneNode(true));
+                }
+                {
+                    const button = document.getElementById('w3_rot');
+                    button.addEventListener("click", () => {
+                        window.state.w3 = (window.state.w3 + 1) % 4;
+                        render_canvas();
+                    });
+                    button.className = window.state.w3 > 0 ? 'button active' : 'button';
+                }
+
+                {
+                    const img = document.getElementById('art_img');
+                    img.replaceWith(img.cloneNode(true));
+                }
+                {
+                    const img = document.getElementById('art_img');
+                    img.src = `images/${state.project.prefix}/${window.state.prefix()}_art.jpg`;
+                    img.addEventListener("click", () => {
+                        window.open(img.src, '_blank').focus();
+                    });
+                }
+            }
+        </script>
+    </div>
+</div>
+</body>
+
+<script type="text/javascript">
+    init();
+</script>
+
+</html>
