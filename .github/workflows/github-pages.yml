@@ -38,6 +38,7 @@ jobs:
             ${{ matrix.path }}/web/index.css
             ${{ matrix.path }}/web/index.html
             ${{ matrix.path }}/web/index.json
+            ${{ matrix.path }}/web/description.json
 
   deploy:
     needs: build
