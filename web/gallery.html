@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>ArteVis</title>
+    <link rel="icon" type="image/x-icon" href="">
+    <link href="style.css" rel="stylesheet" type="text/css">
+    <script type="text/javascript">
+        const search = new URLSearchParams(window.location.search);
+        const domain = search.has("domain") ? search.get("domain") : "https://s9latimm.github.io/artevis";
+        const develop = search.has("develop") ? search.get("develop").toLowerCase() === "true" : false;
+
+        function init() {
+            render_tabs(search.has("domain") ? domain : undefined, develop);
+            fetch(`${domain}/gallery.json`)
+                .then(response => response.json())
+                .then(gallery => {
+                    render_gallery(gallery);
+                }).catch(console.error);
+        }
+    </script>
+</head>
+
+<body>
+<div id="content">
+    <div class="tabs" id="tabs">
+        <a class="button tab disabled" id="home">home</a>
+        <a class="button tab disabled" id="demo">demo</a>
+        <a class="button tab enabled" id="gallery">gallery</a>
+    </div>
+
+    <script type="text/javascript">
+        function render_tabs(domain, home, develop) {
+            const button = document.getElementById("home");
+            const href = develop ? "index.html" : home;
+
+            const search = [];
+            if (domain) {
+                search.push(`domain=${domain}`);
+            }
+            if (develop) {
+                search.push("develop=true");
+            }
+
+            if (search.length > 0) {
+                button.href = href + "?" + search.join("&");
+            } else {
+                button.href = href;
+            }
+        }
+
+        ["demo"].forEach(tab => {
+            const button = document.getElementById(tab);
+            const href = develop ? `${tab}.html` : tab;
+
+            const search = [];
+            if (domain) {
+                search.push(`domain=${domain}`);
+            }
+            if (develop) {
+                search.push("develop=true");
+            }
+
+            if (search.length > 0) {
+                button.href = href + "?" + search.join("&");
+            } else {
+                button.href = href;
+            }
+        });
+    </script>
+
+    <hr>
+
+    <div class="gallery" id="images"></div>
+
+    <script type="text/javascript">
+        function render_gallery(gallery) {
+            const images = document.getElementById("images");
+            gallery.forEach(image => {
+                const a = document.createElement("a");
+                const img = document.createElement("img");
+                a.href = image;
+                img.src = image;
+
+                a.appendChild(img);
+                images.appendChild(a);
+            });
+        }
+    </script>
+</div>
+</body>
+
+<script type="text/javascript">
+    init();
+</script>
+
+</html>

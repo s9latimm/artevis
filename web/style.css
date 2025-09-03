@@ -26,21 +26,20 @@ html, body {
 img {
     width: 100%;
     height: auto;
-    margin: auto;
 }
 
 .preview {
-    height: 5%;
-    width: 5%;
-    margin: 10px;
+    height: auto;
+    width: 4.508%;
+    margin: 16px 16px 16px 0;
 }
 
 .preview img {
-    max-width: 64px;
     cursor: pointer;
 }
 
 .previews {
+    margin: 0 0 0 32px;
     display: flex;
     height: 5%;
     width: 100%;
@@ -61,13 +60,13 @@ img {
 }
 
 .interaction {
-    width: 75%;
+    width: 76.393%;
     height: auto;
     margin: 32px;
 }
 
 .art {
-    width: 25%;
+    width: 23.607%;
     height: auto;
     margin: 10px;
     cursor: zoom-in;
@@ -102,7 +101,10 @@ img {
 }
 
 .tab {
-    font-size: 20px;
+    font-size: 24px;
+    width: auto;
+    height: auto;
+    margin: 16px 16px 16px 32px !important;
 }
 
 .langs {
@@ -110,15 +112,20 @@ img {
     justify-content: left !important;
 }
 
+hr {
+    margin: 0;
+}
+
 .lang {
-    height: 16px !important;
-    width: 16px !important;
-    margin: 16px !important;
-    font-size: 16px !important;
+    width: auto;
+    height: auto;
+    margin: 32px 32px 16px 0 !important;
+    font-size: 20px !important;
 }
 
 .textblock {
     margin: 0 32px 0 32px;
+    width: 38.197%;
 }
 
 .text {
@@ -173,10 +180,24 @@ img {
     color: gray !important;
 }
 
-.video {
-    margin: 16px;
+.textblock .video {
+    margin: 16px 0 16px 0;
+    text-align: left;
 }
 
-.video video {
-    height: 320px;
+.textblock .video video {
+    width: 61.803%;
+}
+
+.video a {
+    cursor: zoom-in;
+}
+
+.gallery {
+    display: inline-flex;
+    margin:  16px;
+}
+
+.gallery a {
+    margin:  16px 16px 16px 16px
 }

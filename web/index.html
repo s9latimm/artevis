@@ -8,11 +8,11 @@
     <link href="style.css" rel="stylesheet" type="text/css">
     <script type="text/javascript">
         const search = new URLSearchParams(window.location.search);
-        const domain = search.has('domain') ? search.get('domain') : 'https://s9latimm.github.io/artevis';
-        const develop = search.has('develop') ? search.get('develop').toLowerCase() === 'true' : false;
+        const domain = search.has("domain") ? search.get("domain") : "https://s9latimm.github.io/artevis";
+        const develop = search.has("develop") ? search.get("develop").toLowerCase() === "true" : false;
 
         function init() {
-            render_tabs(search.has('domain') ? domain : undefined, develop);
+            render_tabs(search.has("domain") ? domain : undefined, develop);
             fetch(`${domain}/description.json`)
                 .then(response => response.json())
                 .then(description => {
@@ -24,97 +24,109 @@
 
 <body>
 <div id="content">
-    <div id="index">
-        <div class="tabs" id="tabs">
-            <a class="button tab enabled" id="home">home</a>
-            <a class="button tab disabled" id="demo">demo</a>
-        </div>
+    <div class="tabs" id="tabs">
+        <a class="button tab enabled" id="home">home</a>
+        <a class="button tab disabled" id="demo">demo</a>
+        <a class="button tab disabled" id="gallery">gallery</a>
+    </div>
 
-        <script type="text/javascript">
-            function render_tabs(domain, develop) {
-                const button = document.getElementById("demo");
-                const href = develop ? "demo.html" : "demo";
+    <script type="text/javascript">
+        function render_tabs(domain, develop) {
+            ["demo", "gallery"].forEach(tab => {
+                const button = document.getElementById(tab);
+                const href = develop ? `${tab}.html` : tab;
 
-                const search = []
+                const search = [];
                 if (domain) {
-                    search.push(`domain=${domain}`)
+                    search.push(`domain=${domain}`);
                 }
                 if (develop) {
-                    search.push("develop=true")
+                    search.push("develop=true");
                 }
 
                 if (search.length > 0) {
-                    button.href = href + "?" + search.join("&")
+                    button.href = href + "?" + search.join("&");
                 } else {
-                    button.href = href
+                    button.href = href;
                 }
-            }
-        </script>
+            });
+        }
+    </script>
 
-        <hr>
+    <hr>
 
-        <div class="textblock">
-            <div class="buttons langs" id="langs"></div>
-            <div id="description"></div>
-
-            <div class="video">
+    <div class="textblock">
+        <div class="buttons langs" id="langs"></div>
+        <div id="description"></div>
+        <div class="video" id="training">
+            <a href="demo.mp4" target="_blank">
                 <video autoplay loop muted>
                     <source src="demo.mp4" type="video/mp4">
                 </video>
-            </div>
+            </a>
         </div>
-
-        <script type="text/javascript">
-
-            function switch_language(selected, options) {
-                console.log(selected)
-                options.forEach(lang => {
-                    const description = document.getElementById(`description-${lang}`)
-                    const button = document.getElementById(`lang-${lang}`)
-                    if (lang === selected) {
-                        description.className = description.className.replaceAll("hidden", "").trim()
-                        if (!button.className.includes("enabled")) {
-                            button.className = (button.className + " enabled").trim()
-                        }
-                        button.className = button.className.replaceAll("disabled", "").trim()
-                    } else {
-                        if (!description.className.includes("hidden")) {
-                            description.className = (description.className + " hidden").trim()
-                        }
-                        if (!button.className.includes("disabled")) {
-                            button.className = (button.className + " disabled").trim()
-                        }
-                        button.className = button.className.replaceAll("enabled", "").trim()
-                    }
-                });
-            }
-
-            function render_description(description) {
-                Object.keys(description).forEach(lang => {
-                    const text = document.createElement('div');
-                    text.className = "text"
-                    text.id = `description-${lang}`
-                    text.innerText = description[lang].text
-                    document.getElementById("description").appendChild(text)
-                });
-
-                Object.keys(description).forEach(lang => {
-                    const button = document.createElement('div');
-
-                    button.className = "button lang"
-                    button.id = `lang-${lang}`
-                    button.innerText = lang
-                    button.addEventListener("click", () => {
-                        switch_language(lang, Object.keys(description))
-                    });
-
-                    document.getElementById("langs").appendChild(button)
-                });
-
-                switch_language(Object.keys(description)[0], Object.keys(description))
-            }
-        </script>
+        <div class="video" id="network">
+            <a href="network.mp4" target="_blank">
+                <video autoplay loop muted>
+                    <source src="network.mp4" type="video/mp4">
+                </video>
+            </a>
+        </div>
     </div>
+
+
+    <script type="text/javascript">
+
+        function switch_language(selected, options) {
+            console.log(selected);
+            options.forEach(lang => {
+                const description = document.getElementById(`description-${lang}`);
+                const button = document.getElementById(`lang-${lang}`);
+                if (lang === selected) {
+                    description.className = description.className.replaceAll("hidden", "").trim();
+                    if (!button.className.includes("enabled")) {
+                        button.className = (button.className + " enabled").trim();
+                    }
+                    button.className = button.className.replaceAll("disabled", "").trim();
+                    window.lang = lang;
+                } else {
+                    if (!description.className.includes("hidden")) {
+                        description.className = (description.className + " hidden").trim();
+                    }
+                    if (!button.className.includes("disabled")) {
+                        button.className = (button.className + " disabled").trim();
+                    }
+                    button.className = button.className.replaceAll("enabled", "").trim();
+                }
+            });
+        }
+
+        function render_description(description) {
+            Object.keys(description).forEach(lang => {
+                const text = document.createElement("div");
+                text.className = "text";
+                text.id = `description-${lang}`;
+                text.innerText = description[lang].text.replaceAll("\n", "\n\n");
+
+                document.getElementById("description").appendChild(text);
+            });
+
+            Object.keys(description).forEach(lang => {
+                const button = document.createElement("div");
+
+                button.className = "button lang";
+                button.id = `lang-${lang}`;
+                button.innerText = lang;
+                button.addEventListener("click", () => {
+                    switch_language(lang, Object.keys(description));
+                });
+
+                document.getElementById("langs").appendChild(button);
+            });
+
+            switch_language(Object.keys(description)[0], Object.keys(description));
+        }
+    </script>
 </div>
 </body>
 
