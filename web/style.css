@@ -5,6 +5,7 @@
     color: white;
     font-size: 14px;
     text-align: center;
+    text-decoration: none;
 
     -webkit-touch-callout: none;
     -webkit-user-select: none;
@@ -86,10 +87,46 @@ img {
     align-items: center;
     height: 32px;
     width: 32px;
-    margin: 32px;
+    margin: 16px 0 16px 32px;
     color: white;
     font-size: 32px;
     cursor: pointer;
+}
+
+.tabs {
+    display: flex;
+    justify-content: left;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+}
+
+.tab {
+    font-size: 20px;
+}
+
+.langs {
+    flex-wrap: wrap;
+    justify-content: left !important;
+}
+
+.lang {
+    height: 16px !important;
+    width: 16px !important;
+    margin: 16px !important;
+    font-size: 16px !important;
+}
+
+.textblock {
+    margin: 0 32px 0 32px;
+}
+
+.text {
+    font-family: serif, serif;
+    hyphens: auto;
+    font-size: 16px;
+    margin: 0;
+    text-align: left;
 }
 
 .buttons {
@@ -122,4 +159,24 @@ img {
 
 .active {
     color: red !important;
+}
+
+.hidden {
+    display: none;
+}
+
+.enabled {
+    cursor: default;
+}
+
+.disabled {
+    color: gray !important;
+}
+
+.video {
+    margin: 16px;
+}
+
+.video video {
+    height: 320px;
 }
