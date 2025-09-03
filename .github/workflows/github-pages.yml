@@ -2,33 +2,42 @@ name: GitHub Pages
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, develop ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     continue-on-error: false
-
+    strategy:
+      matrix:
+        ref: [ master, develop ]
+        include:
+          - ref: master
+            path: .
+          - ref: develop
+            path: develop
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ matrix.ref }}
+          path: ${{ matrix.path }}
           submodules: false
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: build-master
+          name: build-${{ matrix.ref }}
           retention-days: 1
           if-no-files-found: error
           overwrite: true
           path: |
-            web/images/
-            web/demo.mp4
-            web/index.css
-            web/index.html
-            web/index.json
+            ${{ matrix.path }}/web/images/
+            ${{ matrix.path }}/web/demo.mp4
+            ${{ matrix.path }}/web/index.css
+            ${{ matrix.path }}/web/index.html
+            ${{ matrix.path }}/web/index.json
 
   deploy:
     needs: build
@@ -45,6 +54,11 @@ jobs:
         with:
           name: build-master
           path: .
+      - name: Download Develop Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-develop
+          path: develop
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
