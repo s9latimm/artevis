@@ -1,30 +1,52 @@
 {
   "fog": {
     "name": "Der Wanderer über dem Nebelmeer",
+    "artist": "Caspar David Friedrich",
     "prefix": "fog"
   },
   "pearl": {
     "name": "Meisje met de parel",
+    "artist": "Johannes Vermeer",
     "prefix": "pearl"
   },
   "scream": {
     "name": "Skrik",
+    "artist": "Edvard Munch",
     "prefix": "scream"
   },
   "garden": {
     "name": "Garten am Thuner See",
+    "artist": "August Macke",
     "prefix": "garden"
   },
   "mona": {
     "name": "Mona Lisa",
+    "artist": "Leonardo da Vinci",
     "prefix": "mona"
   },
   "horse": {
     "name": "Blaues Pferd",
+    "artist": "Franz Marc",
     "prefix": "horse"
   },
   "stars": {
     "name": "De sterrennacht",
+    "artist": "Vincent van Gogh",
     "prefix": "stars"
+  },
+  "square": {
+    "name": "Чёрный квадрат",
+    "artist": "Казимир Малевич",
+    "prefix": "square"
+  },
+  "jaune": {
+    "name": "Jaune Rouge Bleu",
+    "artist": "Василий Васильевич Кандинский",
+    "prefix": "jaune"
+  },
+  "bauhaus": {
+    "name": "Bauhaus-Logo",
+    "artist": "Oskar Schlemmer",
+    "prefix": "bauhaus"
   }
 }

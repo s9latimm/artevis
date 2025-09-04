@@ -9,4 +9,17 @@ DEFAULT_FPS: float = 6
 THRESHOLD: int = 1
 DTYPE: torch.dtype = torch.float32
 
-PROJECTS: [str] = ['mona', 'pearl', 'fog', 'scream', 'stars', 'garden', 'horse']
+PROJECTS: [str] = [
+    'mona',
+    'pearl',
+    'fog',
+    'scream',
+    'stars',
+    'garden',
+    'horse',
+    'square',
+    'square',
+    'square',
+    'jaune',
+    'bauhaus',
+]
