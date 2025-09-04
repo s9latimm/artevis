@@ -170,8 +170,73 @@ hr {
     transform-origin: center center;
 }
 
+.matrix {
+    position: relative;
+    cursor: pointer;
+}
+
+.triangle_0 {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 8vw;
+    right: 0;
+    margin: auto;
+    z-index: 99;
+    width: 0;
+    height: 0;
+    border: solid 8vw;
+    border-color: transparent transparent transparent rgba(0, 0, 0, 0.1);
+}
+
+.triangle_1 {
+    position: absolute;
+    top: 8vw;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: auto;
+    z-index: 99;
+    width: 0;
+    height: 0;
+    border: solid 8vw;
+    border-color: transparent transparent transparent rgba(0, 0, 0, 0.1);
+}
+
+.triangle_2 {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 8vw;
+    margin: auto;
+    z-index: 99;
+    width: 0;
+    height: 0;
+    border: solid 8vw;
+    border-color: transparent transparent transparent rgba(0, 0, 0, 0.1);
+}
+
+.triangle_3 {
+    position: absolute;
+    top: 0;
+    bottom: 8vw;
+    left: 0;
+    right: 0;
+    margin: auto;
+    z-index: 99;
+    width: 0;
+    height: 0;
+    border: solid 8vw;
+    border-color: transparent transparent transparent rgba(0, 0, 0, 0.1);
+}
+
 .active {
-    color: red !important;
+    color: white !important;
+}
+
+.inactive {
+    color: gray !important;
 }
 
 .hidden {
@@ -200,15 +265,15 @@ hr {
 }
 
 .gallery {
-    margin:  16px 0 16px 0;
+    margin: 16px 0 16px 0;
 }
 
 .series {
     display: inline-flex;
-    margin:  16px 24px 16px 24px;
+    margin: 16px 24px 16px 24px;
 }
 
 .gallery a {
-    margin:  0 8px 0 8px;
+    margin: 0 8px 0 8px;
     cursor: zoom-in;
 }
