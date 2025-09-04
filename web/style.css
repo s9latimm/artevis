@@ -195,11 +195,15 @@ hr {
 }
 
 .gallery {
+    margin:  16px 0 16px 0;
+}
+
+.series {
     display: inline-flex;
-    margin:  16px;
+    margin:  16px 24px 16px 24px;
 }
 
 .gallery a {
-    margin:  16px 16px 16px 16px;
+    margin:  0 8px 0 8px;
     cursor: zoom-in;
 }

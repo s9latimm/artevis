@@ -77,15 +77,20 @@
     <script type="text/javascript">
         function render_gallery(gallery) {
             const images = document.getElementById("images");
-            gallery.forEach(image => {
-                const a = document.createElement("a");
-                const img = document.createElement("img");
-                a.href = image;
-                a.target = "_blank"
-                img.src = image;
+            gallery.forEach(series => {
+                const row = document.createElement("div");
+                row.className = "series";
+                series.forEach(image => {
+                    const a = document.createElement("a");
+                    const img = document.createElement("img");
+                    a.href = image;
+                    a.target = "_blank";
+                    img.src = image;
 
-                a.appendChild(img);
-                images.appendChild(a);
+                    a.appendChild(img);
+                    row.appendChild(a);
+                });
+                images.appendChild(row);
             });
         }
     </script>
