@@ -65,6 +65,10 @@ img {
     margin: 0;
 }
 
+.interaction hr {
+    margin: 0 0 0 16px;
+}
+
 .art {
     width: 23.607%;
     height: auto;
@@ -87,8 +91,9 @@ img {
     align-items: center;
     height: 32px;
     width: 32px;
-    margin: 16px 0 16px 32px;
+    margin: 16px;
     color: white;
+    text-align: center;
     font-size: 32px;
     cursor: pointer;
 }
