@@ -1,6 +1,26 @@
 [
-  "images/fog/0-0-0-0-0_art.jpg",
-  "images/fog/0-0-0-0-1_art.jpg",
-  "images/fog/0-0-0-0-2_art.jpg",
-  "images/fog/0-0-0-0-3_art.jpg"
+  [
+    "images/fog/0-0-0-0-0_art.jpg",
+    "images/fog/0-0-0-0-1_art.jpg",
+    "images/fog/0-0-0-0-2_art.jpg",
+    "images/fog/0-0-0-0-3_art.jpg"
+  ],
+  [
+    "images/horse/0-0-0-3-0_art.jpg",
+    "images/horse/0-0-0-3-1_art.jpg",
+    "images/horse/0-0-0-3-2_art.jpg",
+    "images/horse/0-0-0-3-3_art.jpg"
+  ],
+  [
+    "images/pearl/0-1-1-2-0_art.jpg",
+    "images/pearl/0-1-1-2-1_art.jpg",
+    "images/pearl/0-1-1-2-2_art.jpg",
+    "images/pearl/0-1-1-2-3_art.jpg"
+  ],
+  [
+    "images/scream/1-0-0-2-0_art.jpg",
+    "images/scream/1-0-0-2-1_art.jpg",
+    "images/scream/1-0-0-2-2_art.jpg",
+    "images/scream/1-0-0-2-3_art.jpg"
+  ]
 ]

@@ -42,14 +42,14 @@ img {
     margin: 0 0 0 32px;
     display: flex;
     height: 5%;
-    width: 100%;
+    max-width: 100%;
     top: 0;
     overflow: hidden;
 }
 
 .weight {
-    width: 33%;
-    margin: 10px;
+    max-width: 33%;
+    margin: 0 0 0 16px;
 }
 
 .weights {
@@ -62,20 +62,21 @@ img {
 .interaction {
     width: 76.393%;
     height: auto;
-    margin: 32px;
+    margin: 0;
 }
 
 .art {
     width: 23.607%;
     height: auto;
-    margin: 10px;
+    margin: 0 16px 0 32px;
     cursor: zoom-in;
 }
 
 .canvas {
-    display: flex;
-    height: 95%;
-    width: 100%;
+    display: inline-flex;
+    max-height: 95%;
+    max-width: 100%;
+    margin: 16px;
     top: 10%;
     overflow: hidden;
 }

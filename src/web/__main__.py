@@ -178,13 +178,13 @@ def main():
                 Rectangle((12, -2.5), im.shape[1], im.shape[0], color='gray', lw=1, fill=False, zorder=3,
                           clip_on=False))
 
+            cmap = SEISMIC
+
             y, x = np.mgrid[0:6, 0:6]
             x = x.astype(np.float64) - 8 + 2.5
             y = y.astype(np.float64) - 11.5
 
-            norm = colors.TwoSlopeNorm(vmin=-1, vcenter=0, vmax=1)
-            cmap = SEISMIC
-
+            norm = colors.TwoSlopeNorm(vmin=np.nanmin(w1), vcenter=0, vmax=np.nanmax(w1))
             ax.pcolor(x, y, w1, norm=norm, cmap=cmap)
 
             ax.plot([2, -6], [-2, -6], '--', lw=1, color='gray', zorder=4, clip_on=False)
@@ -194,6 +194,8 @@ def main():
             y, x = np.mgrid[0:6, 0:6]
             x = x.astype(np.float64) + 2.5
             y = y.astype(np.float64) - 11.5
+
+            norm = colors.TwoSlopeNorm(vmin=np.nanmin(w2), vcenter=0, vmax=np.nanmax(w2))
             ax.pcolor(x, y, w2, norm=norm, cmap=cmap)
 
             ax.plot([4, 2], [-2, -6], '--', lw=1, color='gray', zorder=4, clip_on=False)
@@ -203,6 +205,8 @@ def main():
             y, x = np.mgrid[0:6, 0:6]
             x = x.astype(np.float64) + 8 + 2.5
             y = y.astype(np.float64) - 11.5
+
+            norm = colors.TwoSlopeNorm(vmin=np.nanmin(w3), vcenter=0, vmax=np.nanmax(w3))
             ax.pcolor(x, y, w3, norm=norm, cmap=cmap)
 
             ax.plot([6, 10], [-2, -6], '--', lw=1, color='gray', zorder=4, clip_on=False)
